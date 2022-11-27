@@ -1,0 +1,276 @@
+			TUTORIAL API REST CON EXPRESS Y TYPESCRIPT POR MIDUDEV
+
+Source: https://www.youtube.com/watch?v=ZpY5KdGQvwI&t=2059s&ab_channel=midudev
+
+Este video forma parte de su curso fullstack bootcamp gratuito.Es bastante reciente.
+
+				INSTALANDO DEPENDENCIAS Y CONFIGURACIONES
+
+Para crear una API con Node en Typescript seguir estos pasos:
+
+Lo primero será crear el package.json con npm init -y.
+Despues instalaré typescript ( npm i typescript -D)
+Agrego un script:
+"tsc":"tsc"
+Ahora ejecuto ese comando,pero ojo con la sintaxis:
+npm run tsc -- --init <- necesito ese -- por que si no el --init iría al npm run y no al tsc(siempre puedo usar tsc --init en vez de un script con dos entradas posibles)Sea como sea es importante entender que hace el -- en los comandos.
+
+TIP: crear el tsconfig.json de esta manera es altamente recomendable ya que me dejará todos los comentarios con lo que hace cada propiedad configurable,aunque también puedo copiarlo de otro proyecto.
+
+Le cambio el outDir a ./build.Fijate como lo deja:
+  "noUnusedLocals": true,                           /* Enable error reporting when a local variables aren't read. */
+    "noUnusedParameters": true,                       /* Raise an error when a function parameter isn't read */
+    // "exactOptionalPropertyTypes": true,               /* Interpret optional property types as written, rather than adding 'undefined'. */
+    "noImplicitReturns": true,                        /* Enable error reporting for codepaths that do not explicitly return in a function. */
+    "noFallthroughCasesInSwitch": true,   <- debo poner default case en los switch
+
+Turno de express.Fijate en el uso de -E(--exact) que guardará la versión exacta:
+npm i express -E
+
+* Puedo ver que cualquier instalación con -E no usará el caret(diría que es bueno)
+  "devDependencies": {
+    "typescript": "^4.6.4"
+  },
+  "dependencies": {
+    "express": "4.18.1"
+  }
+}
+
+De echo debí hacerlo con la de Typescript.
+TIP: con "typescript":"~4.6.4" sólo subirá la minor release(hasta 4.6.x), con ^4.6.4 subirá la mayor( hasta 4.x.x)
+IMPORTANTE: cuando se suben las apps al repo siempre se omite la carpeta node_modules.Es por esto que al reinstalar las dependencias si salió una nueva con el npm install voy a coger esa,yo o cualquiera que reinstale la app.
+
+Sin embargo,si subo el package-lock.json éste si guarda un registro de la versión exacta,e instalará esta si ejecuto npm install sobre un folder con tanto el package.json como el package-lock.json(con lo que debo subirlo al repo).Pero,ojo,el comando es npm ci(de continuos integration).
+npm i <- instala las deps según el package.json y los ^ y ~
+npm ci <- instala las deps según el package-lock.json 
+
+Realmente es complejo saber que dependencia fijar como exacta y cual no.
+
+NOTA: express necesitará de los types para autocompletado.
+npm i @types/express -D
+
+NOTA: dado que pusimos el noUnusedParameters a true no voy a poder dejar argumentos sin usar.Midu recomienda usar el _,ya que typescript ignora cualquier argumento que sea un guion bajo:
+
+app.get("/ping", (_, res: Response) => {
+  res.send("pong");
+});
+
+IMPORTANTE: en este ejemplo sé que ese guión representa a la request,pero también se recomienda usar _req(también los ignora ts) para sobre todo cuando son muchos o quiera dejar claro qué argumento estoy ignorando 
+
+						COMPILANDO LA APP
+
+Si ejecuto el comando que configuramos npm run tsc el compilador de typescript compilará a js todo mi código y lo dejará en /build tal como he configurado.Despues podria ejecutar con node el javascript.Sin embargo puedo agilizar este proceso(y debería).
+
+Si bien en Node instalaría nodemon para esto, en TS tengo la libreria ts-node-dev,que es una mezcla de ts-node(que compila y ejecuta pero no se queda en modo watch para recompilar) y nodemon(además de me ejecuta la app también actualiza los cambios,recompilando)
+npm i ts-node-dev -DE
+
+Ya puedo crear el comando que apunte al index.ts en vez de al .js:
+ "dev":"ts-node-dev src/index.ts"
+
+			CREANDO LAS RUTAS - CONTROLLERS - SERVICES Y MOCK DATA
+
+NOTA: recuerda que import express from 'express' es ESModules mientras que const express = require('express') es CommonJS.Al final aunque use ESModules al compilar se usará CommonJS pues los browsers sólo entienden CommonJS.
+
+IMPORTANTE: se recomienda tener la menor cantidad de lógica dentro de las rutas.Hay que sacarla a services(y no controllers??).
+En cuanto a la mock data usamos un .json,pero fijate que TS por defecto no sabe interpretarlo,tengo que activar la capacidad de hacerlo
+
+Debemos crear el tipado para el JSON,incluso usaremos enums o types(fijate que si uso types no tengo acceso en runtime pero si uso una enum si tengo acceso,más adelante será clave no haber usado una enum aqui):
+
+export type Weather =
+  | "sunny"
+  | "rainy"
+  | "cloudy"
+  | "windy"
+  | "snowy"
+  | "foggy"
+  | "stormy";
+export type Visibility = "great" | "good" | "ok" | "poor";
+
+export interface DiaryEntry {
+  id : number;
+  date : string;
+  weather : Weather;
+  visibility : Visibility;
+  comment : string;
+}
+
+IMPORTANTE: fijate que incluso tuvimos que usar aserción de tipos para tipar el JSON:
+
+/* a esto se le llama aserción de tipos.Implica decirle al programa que una variable tiene que funcionar de una forma concreta,en este caso como un DiaryEntry[],lo cual puede hacer. */
+export const getEntries = () => diaryData as Array<DiaryEntry>;	
+Obviamente diaryData debe poder hacer ese cambio de tipos.
+
+TIP: hay una cadena de prioridad a la hora de importar un file sin extensión:
+import diaryData from './diaries'; 
+primero buscará por .tsx | .ts | .node | .js | .json (entiendo que importa el json lo último).
+NOTA: En ECMAScript con ESModules es necesario especificar la extensión pero no en TS.
+
+			USANDO UN LINTER PARA TS CON EXPRESS
+
+La recomendación de Midu es usar la libreria ts-standard directamente, la cual va a usar eslint por debajo pero viene ya con todo configurado:
+>npm i ts-standard -DE
+ * Falta agregar esto al package.json:
+
+"eslintConfig": {
+  "parserOptions": {
+    "project": "./tsconfig.json"
+   },
+  "extends": [
+    "./node_modules/ts-standard/eslintrc.json"
+   ]
+},
+	
+			UTILITY TYPES
+
+Hay dos utility types que es muy recomendable dominar.Bien,imaginemos que tengo estos dos servicios,los cuales consultan la misma data pero un omite una simple propiedad de DiaryEntry:
+export const getEntries = (): DiaryEntry[] => diaries
+
+export const getEntriesWithoutSensitiveInfo = (): NonSensitiveDiaryEntry[] => diaries
+
+Fijate que la solución a simple vista parece crear otra interfaz
+export interface DiaryEntry {
+  id: number
+  date: string
+  weather: Weather
+  visibility: Visibility
+  comment: string
+}
+export interface NonSensitiveDiaryEntry {
+  id: number
+  date: string
+  weather: Weather
+  visibility: Visibility
+}
+
+Sin embargo,esto es una mala práctica,porque estoy repitiendo código(debo usar el mínimo número de tipos posibles).Para solucionar esto podria usar el utility type Pick<T,values> 
+export type NonSensitiveDiaryEntry = Pick<DiaryEntry, 'id' | 'date' | 'weather' | 'visibility'>
+
+Sin embargo es aún más rápido usar Omit<T,values> y omitir 1 campo a añadir todos menos uno:
+export type NonSensitiveDiaryEntry = Omit<DiaryEntry, 'comment'>
+IMPORTANTE: sólo funciona con types,no con interfaces.Además,esto solo es el tipado,no va a filtrar la respuesta quitando la propiedad comment:
+
+export const getEntriesWithoutSensitiveInfo = (): NonSensitiveDiaryEntry[] =>
+  diaries.map(({ id, date, weather, visibility }) => ({
+    id,
+    date,
+    weather,
+    visibility
+  }))
+
+NOTA: Midu recomienda usar el unary operator:
+router.get('/:id', (req, res: Response) => {
+  const diary = diaryServices.findById(Number(req.params.id)) <- usar +req.params.id
+
+Fijate como al añadir una entrada lo mejor es buscar el máximo de entre los ids y sumarle 1:
+
+export const addEntry = (
+  date: string,
+  weather: Weather,
+  visibility: Visibility,
+  comment: string
+): DiaryEntry => {
+  const newDiaryEntry: DiaryEntry = {
+    id: Math.max(...diaries.map((d) => d.id)) + 1,
+    date,
+    weather,
+    visibility,
+    comment
+  }
+  diaries.push(newDiaryEntry)
+  return newDiaryEntry
+}
+
+		TYPESCRIPT VALIDACIONES Y LOS CONTRATOS ESTÁTICOS
+
+Bien,ya podria ir a Postman o Thunder Client y ver las entradas del diario e incluso añadir otras.Fijate que yo sí sé que es lo que debo mandar:
+{
+  "date":"2021-06-06",
+  "weather":"sunny",
+  "visibility":"good",
+  "comment":"I need to improve my English"
+}
+Y si hago un GET veré que me ha añadido esto:
+{
+    "id": 5,
+    "date": "2021-06-06",
+    "weather": "sunny",
+    "visibility": "good",
+    "comment": "I need to improve my English"
+}
+Bien,pero fijate la lógica del controlador:
+router.post('/', (req, res) => {
+  const { date, weather, visibility, comment } = req.body
+  const newDiaryEntry = diaryServices.addDiaryEntry({
+    date,
+    weather,
+    visibility,
+    comment
+  })
+
+  ¿Que tipo es date,weather,...? Realmente son tipo any.Puedo añadir cualquier cosa:
+{
+    "date":true,
+    "weather":"kikos",
+    "visibility":"ou yeah",
+    "comment":"I need to improve my English"
+}
+Y veo que lo guarda.Debo tener muy claro hasta donde llega Typescript.Typescript es como un linter,no puede saber que ocurre fuera del IDE.Hay que hacer las validaciones,pues.
+NOTA: normalmente usaré express-validator
+NOTA: fijate que ni siquiera tiene el código en un try catch.Esto es fundamental para la validación custom que vamos a hacer.
+Lo primero es crear una función parser:
+ const newDiaryEntry = toNewDiaryEntry(date, weather, visibility, comment);
+
+ Empezamos con la validacion para un campo string:
+const parseComment = (commentFromRequest: any): string => {
+  if (commentFromRequest !== null || !isString(commentFromRequest)) {
+    throw new Error('Invalid or missing comment')
+  } else {
+    return commentFromRequest
+  }
+}
+
+const isString = (value: any): boolean => typeof value === 'string' || value instanceof String
+
+Ahora para un campo Date.Fijate en el uso de Boolean(Date.parse(dateFromRequest) que me dice si es una Date:
+const isDate = (date: string): boolean => Boolean(Date.parse(date))
+const parseDate = (dateFromRequest: any): string => {
+  if ( dateFromRequest !== null || !isString(dateFromRequest) || !isDate(dateFromRequest)
+  ) {
+    throw new Error('Invalid or missing date')
+  }
+  return dateFromRequest
+}
+
+Bien,llega la parte interesante y es comprobar que sea un Weather correcto.Pudiera parecer que puedo hacer esto y sería correcto en principio:
+const isWeather = (weather: string): boolean =>
+  ['sunny', 'rainy', 'cloudy', 'windy', 'snowy', 'foggy', 'stormy'].includes( weather)
+
+Sin embargo,esto es una mala práctica,pues estoy repitiendo todo el type,y encima ese type es una Source of Truth,es decir que podria cambiar el dia de mañana a más opciones y tendría que venir aqui,la mantenibilidad y resiliencia se ve afectada.Solución: UNA ENUM
+NOTA: el tema es que no sólo puedo usar una enum en Typescript,sino que también me crea una constante que puedo usar en runtime,en javascript.Typescript me dará al compilar un objeto al que puedo acceder.Obviamente con un type no hace una kk,por eso la enum.
+
+Asi pues voy a poder chequear con la enum,mas concretamente con sus values:
+const isWeather = (weather: any): boolean => Object.values(Weather).includes(weather)
+Fijate que Object.values(enum).includes(value) devuelve un boolean.Esto es clave
+
+const toNewDiaryEntry = (object: any): NewDiaryEntry => ({
+  weather: parseWeather(object.weather),
+  visibility: parseVisibility(object.visibility),
+  date: parseDate(object.date),
+  comment: parseComment(object.comment)
+})
+
+Ahora si el controlador es mucho mejor:
+
+router.post('/', (req, res) => {
+  try {
+    const newDiaryEntry = toNewDiaryEntry(req.body)
+    const addedDiaryEntry = diaryServices.addDiaryEntry(newDiaryEntry)
+    res.json(addedDiaryEntry)
+  } catch (e) {
+    res.status(400).send(e)
+  }
+})
+IMPORTANTE:fijate que el types.d.ts o cualquier .d.ts no puede tener enums,solo types e interfacespues una enum no es una definición
+
+RESUMEN: typescript no valida nada en runtime ni de los datos que introducirá el cliente,etc.
+radioButton son redondos,checkBox es cuadrado

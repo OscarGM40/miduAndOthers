@@ -1,0 +1,740 @@
+			NOTAS SOBRE LA PLAYLIST DE REACT-QUERY EN FH-DEVTALLES
+
+Antes de realizar un curso sobre esta tecnología es importante saber que puede hacer y si realmente la necesito.
+Básicamente siempre que trabaje con promesas y quiera manejar una caché,el estado,el error,etc es muy útil usar react-query
+
+Es decir,sustituiría al tipico bloque:
+const [number,setNumber] = useState<number>()
+const [isLoading,setIsLoading]...
+const [error,setError]...
+const [key,forceRefetch]= useReducer...
+
+				SECCION 02 PORQUÉ REACT-QUERY
+
+La idea enteramente de esta sección, es que podamos comprender el ¿por qué? y ¿para qué? de React Query.
+
+Aquí haremos una pequeña aplicación que les dará una pequeña pincelada de los beneficios rápidos con las configuraciones de React Query por defecto contra una aplicación que no lo use.
+
+Empezamos creando la carpeta main del curso y despues el subfolder '01-cripto-random'.Con yarn create vite creo una app de React+TS
+
+Queremos crear una app capaz de obtener un numero aleatorio criptografico basado en el ruido atmosférico.LLamaremos a esta API:
+
+https://www.random.org/integers/?num=1&min=1&max=500&col=1&base=10&format=plain&rnd=new
+
+Tal como se puede apreciar en los queryParams se me devuelve un numero aleatorio(como string) entre el min y el max en base 10.
+
+Empezamos con un componente que simplemente haga una petición con fetch a esa url:
+
+const getRandomNumberFromApi = async ():Promise<number> => {
+  const res = await fetch(url anterior);
+  const resParsed = await res.text(); <- me valdría .json() pero es un simple text
+  return +resParsed; <- dado que viene como string,pero sé que el unary operator no va a fallar,a malas devolvería un NaN,pero sigue siendo un number
+}
+
+const AppCmp = () => {
+  const [number,setNumber] = useState<number>();
+
+  useEffect( () => {
+    getRandomNumberFromApi().then(setNumber) <- dado que el useEffect no puede ser asincrono tengo que usar .then
+},[])
+
+  return (
+   <h2>Número aleatorio: {number}</h2>
+)
+
+NOTA: si estoy en StrictMode va a realizar dos veces la petición.Esto es algo con lo que tmb me ayudará esta libreria,ya que no debería salir del modo estricto
+
+}
+
+				VIDEO 09 MEJORAR LA EXPERIENCIA DE USUARIO
+
+La forma anterior de mostrar el number es una pésima experiencia de usuario.El usuario debe saber que se está cargando la petición y no aparecer bruscamente un number.
+
+  const [number, setNumber] = useState<number>();
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    getRandomNumberFromApi()
+      .then(setNumber)
+      .catch((error) =>setError(error.message))
+  }, []);
+
+  useEffect(() => {
+    if (number) setIsLoading(false);
+  },[number]);
+
+  useEffect(() => {
+    if (error) setIsLoading(false);
+  },[error]);
+
+Recuerda que la gente de React recomienda usar efectos independientes,cada uno con su dependencias.Debo seguir ese ejemplo.
+Bien,pero queremos tmb un botón que haga el refetch manualmente(obviamente no usando el browser,asinto)
+
+export const App = () => {
+  const [number, setNumber] = useState<number>();
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string>();
+  // const [state,dispatch] = useReducer(function,initialState)
+  const [key, forceRefetch] = useReducer((x) => x + 1, 0);
+
+  useEffect(() => {
+    setIsLoading(true)
+    getRandomNumberFromApi()
+      .then(setNumber)
+      .catch((error) => setError(error.message));
+  }, [key]); // cada vez que llame a forceRefetch,es decir al dispatch,va a cambiar el state,que renombramos a key,y como es la dependencia de este efecto hará un forceRefetch (la key será 0,1,2,3,4 pero no es importante)
+
+Puedo observar perfectamente que aqui hay mucha lógica,y además repetitiva,que tendría que repetir en demasiados sitios.Y ni siquiera hemos llegado a la parte de usar el caché como estado inicial.Es aqui donde entrá TanStak - React Query.
+
+			VIDEO 10-11 MISMO EJERCICIO CON REACT-QUERY
+
+Antes de usar el hook useQuery(que es a grosso modo el resumen de todo) hay que instalarlo.La doc está aqui:
+https://tanstack.com/query/v4
+Fijate que está para React,Solid,Svelte y Vue(y Angular??).Se recomienda 16.8 de React ya que es un hook:
+
+$ npm i @tanstack/react-query
+# or
+$ pnpm add @tanstack/react-query
+# or
+$ yarn add @tanstack/react-query
+
+Tras instalar la libreria hay que hacer una pequeña configuración.Lo primero es crear un objeto de configuración(Provider) que se conoce como queryClient.De igual forma que con useSWR tenemos que preconfigurar como va a a trabajar(el fetcher,etc)
+
+NOTA: si no le paso una se usará una configuración por defecto:
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { App } from "./App";
+import "./index.css";
+
+const queryClient = new QueryClient();
+
+ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+  <React.StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  </React.StrictMode>,
+);
+
+Ojo,que esto trae una configuración por defecto ya.Al final quedaría asi:
+
+export const App = () => {
+  // requiere 1 arg pero son 3 ([cacheConfiguration],fetcher)
+  const query = useQuery(["randomNumber"], getRandomNumberFromApi);
+  return (
+    <div className="App App-header">
+      {query.isLoading ? <h2>Cargando</h2> : <h2>Numero aleatorio: {query.data}</h2>}
+      {!query.isLoading && query.isError && <h3>{`${query.error}`}</h3>}
+
+      <button onClick={() => query.refetch()} disabled={query.isLoading}>
+        Pedir nuevo número
+      </button>
+    </div>
+  );
+};
+
+NOTAS:el primer argumento es un arreglo con configuraciones sobre la cache,de momento solo la damos un nombre.El segundo es el fetcher.Y query.refetch no puede ser mandado por referencia.
+TIP: {query.error} es algo explosivo para React al no saber el tipo no sabe si es un objeto o no,y si lo fuera reventaria.Meterlo en un simple template string es suficiente,pero ese unknown es explosivo dentro de unas {} pues puede ser un objeto.
+
+IMPORTANTE: dado que react-query almacena la data en el cache realmente no voy a ver el disabled del boton,pues el isLoading solo sucede una vez,hay que cambiarlo por isFetching:
+
+  const query = useQuery(["randomNumber"], getRandomNumberFromApi);
+  return (
+    <div className="App App-header">
+      {query.isFetching ? <h2>Cargando</h2> : <h2>Numero aleatorio: {query.data}</h2>}
+      {!query.isFetching && query.isError && <h3>{`${query.error}`}</h3>}
+
+      <button onClick={() => query.refetch()} disabled={query.isFetching}>
+        Pedir nuevo número
+      </button>
+    </div>
+
+MEJORAS: si la app se va offline un tiempo la libreria hace un refetch automáticamente,constrastando la respuesta con la que tiene en la caché.Este comportamiento se puede desactivar si pensamos que son peticiones innecesarias usando el tercer argumento del hook.
+TIP:por defecto tmb intenta tres veces la petición.
+
+HINT: no debo ver este hook useQuery o similares como que solo valen para hacer peticiones,son mucho más que eso(y además tmb permiten hacer mutaciones o POST)
+De momento podemos mejorar aun más esto con un custom hook,ya que hay logica de negocio en el componente(como la url).Indirectamente vamos a usar tmb el patrón adaptador para posibles reutilizaciones,modificaciones.Esto se hace simplemente por crear el hook,asinto:
+
+import { useQuery } from "@tanstack/react-query";
+
+// si no exporto la funcion queda privada a este archivo,interezante
+const getRandomNumberFromApi = async (): Promise<number> => {
+  const res = await fetch(
+    `https://www.random.org/integers/?num=1&min=1&max=500&col=1&base=10&format=plain&rnd=new`,
+  );
+  const numberString = await res.text();
+  // throw new Error("auxilio!!");
+  return +numberString;
+};
+
+export const useRandom = () => {
+  const query = useQuery(["randomNumber"], getRandomNumberFromApi, {
+    retry: false,
+    refetchInterval: 5000,
+  });
+
+  return query;
+};
+
+
+			SECCION 03
+
+En esta sección vamos a traernos todas las etiquetas de las Issues del repo de Facebook.Hay muchas cosas que podrían suceder al realizar esta petición(que demoraremos 2 segundos intencionalmente)
+Configuraremos un staleTime de 1h en la que la info se mantendrá "fresca".
+
+En esta sección veremos:
+
+Configuración de React Query
+DevTools
+Caché
+Fresh
+Stale
+Inactive
+Fetching
+Propiedades como:
+stale time
+placeholderData
+initialDate
+La idea es empezar a entrar en el tema con ejercicios reales que nos permitan mejorar enormemente, la experiencia de usuario.
+
+Descargo el proyecto de su repo(recuerda desactivar la opcion CSS source maps si veo el warning)
+Fijate que el routing que ha usado con la v6 me puede servir como ejemplo.Para ello usó un RouterProvider al que le pasa un objeto router muy parecido a Angular:
+
+Paso UNO: me traigo RouterProvider de react-router
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { RouterProvider } from 'react-router';
+import { router } from './router';
+
+ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+  <React.StrictMode>
+    <RouterProvider router={ router } />
+  </React.StrictMode>
+)
+
+Paso DOS: configuro ese objeto router mediante createBrowserRouter:
+
+import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { GitApp } from '../GitApp';
+
+import { ListView, IssueView } from '../issues/views';
+
+export const router = createBrowserRouter([
+  {
+    path: '/issues',
+    element: <GitApp />,
+    children: [
+        { path: 'list', element: <ListView />,  },
+        { path: 'issue/:id', element: <IssueView /> },
+        { path: '*', element: <Navigate to="list" /> },
+    ]
+  },
+  {
+    path: '/',
+    element: <Navigate to="issues/list" />
+  },
+  {
+    path: '*',
+    element: <h1>Not found</h1>,
+  },
+]);
+
+IMPORTANTE: dado que el componente GitApp tiene rutas hijas tendré que usar un Outlet tmb para que las renderize.Perfecto:
+
+import { FC } from 'react';
+import { Outlet } from 'react-router';
+
+export const GitApp: FC = () => {
+  
+  return (
+    <div className="container mt-3">
+    <h1>Git Issues <small>Seguimiento de problemas</small> </h1>
+      <Outlet />
+    </div>
+  )
+}
+
+Ya era hora que React tratara asi el routing,sencillo y conciso.
+
+NOTA: ha usado la libreria react-markdown para renderizar el markdown correctamente bajo una app de React.
+
+Una vez visto el resumen del proyecto procedemos a instalar React-query
+
+				VIDEO 04 -SECCION 03 ISSUES-APP
+
+De nuevo instalo mediante el gestor que quiera la libreria(usaré yarn):
+> yarn add @tanstack/react-query
+
+También se me pide instalar las devtools para esta lib:
+>yarn add @tanstack/react-query-devtools
+NOTA: este paquete se va a desactivar él solo al estar en un ambiente de producción,no hay que configurar nada
+
+Ahora si,voy al main y configuro el client para react-query(siempre es lo primero).Para ello me traigo el método configurador y el HOC,y también me traigo las devtools:
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+
+// el queryClient es quien va a manejar la cache y la configuración que le pase
+const client = new QueryClient();
+
+ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+  <React.StrictMode>
+    <QueryClientProvider client={client}>
+    {/* este CMP siempre debe estar,obviamente,dentro del QueryClientProvider */}
+      <ReactQueryDevtools />
+      <RouterProvider router={router} />
+    </QueryClientProvider>
+  </React.StrictMode>,
+);
+
+Si he hecho todo bien veré una flor en la app que me abre las devtools de react-query
+
+				VIDEO 05 LABELs API de GitHub
+
+Cualquier repo público de GitHub permite acceder a su sección de issues.Si fuera privado simplemente se necesita el token.Todo esto se llama la Labels API de GitHub:
+
+Para acceder a las labels en con 
+https://api.github.com/repos/facebook/react/labels
+
+Para acceder a las issues en con 
+https://api.github.com/repos/facebook/react/issues
+
+Si quiero acceder a una issue en concreto es con: 
+xxx/repos/{owner}/{repo}/issues/{issue_number}
+
+Una label luce asi:
+    {
+        "id": 791921801,
+        "node_id": "MDU6TGFiZWw3OTE5MjE4MDE=",
+        "url": "https://api.github.com/repos/facebook/react/labels/%E2%9D%A4%EF%B8%8F",
+        "name": "❤️",
+        "color": "ffffff",
+        "default": false,
+        "description": null
+    },
+
+
+Con todo esto ya podemos pedir las labels.Recuerda que hay que usar su hook useQuery,que pide como primer arg un array con la cache y como segundo un método fetcher:
+
+const getLabels = async () => {
+  const resp = await fetch("https://api.github.com/repos/facebook/react/labels");
+  const data = await resp.json();
+  console.log(data);
+  return data;
+}
+
+export const LabelPicker = () => {
+  const labelsQuery = useQuery(
+    ['labels'],
+    getLabels
+
+  )
+
+Si voy a las devtools veré que se ha designado un espacio en caché llamado 'labels' para react-query
+
+			VIDEO 06 USAR AXIOS Y TIPO DE DATO LABEL
+
+Vamos a usar axios en vez de la fetch API pero axios es un gestor de peticiones muy potente:
+>yarn add axios
+
+Creo en un archivo la instancia de axios(fijate que parece muy buena opción):
+
+import axios from "axios";
+
+export const githubApi = axios.create({
+  baseURL: "https://api.github.com/repos/facebook/react",
+  headers: { }
+})
+
+Ya puedo cambiar la funcion fetcher a pasar al hook useQuery:
+const getLabels = async () => {
+  console.log((await githubApi.get("/labels")).data);
+  return (await githubApi.get("/labels")).data;
+};
+
+export const LabelPicker = () => {
+  const labelsQuery = useQuery(["labels"], getLabels, {
+    refetchOnWindowFocus: false,
+  });
+
+Fijate que sin el refetchOnWindowFocus a false me va a realizar una petición cada vez que recupere el foco(click afuera de la app lo pierde y clickar dentro lo gana si lo perdió )
+
+Aun faltaría tipar la data,claro.Para ello me copio la respuesta del JSON y con cTRL+SHIFT+P eligo Paste JSON as Code(recuerda que tengo que tener un JSON en el clipboard):
+
+Despues tipo el retorno de la funcion:
+
+const getLabels = async ():Promise<Label[]> => {
+  console.log((await githubApi.get<Label[]>("/labels")).data);
+  return (await githubApi.get<Label[]>("/labels")).data;
+};
+
+Ojo que hay que tipar el get<T> también.Recuerda que tener esto en el mismo archivo con el JSX es muy mala práctica.Un service o un custom hook valdrá para separar lógica de negocio de la vista
+
+					VIDEO 07 HOOK USE-LABEL
+
+Siempre que pueda debo trabajar con custom-hooks para desacoplar la lógica de la app.Dado que un hook no es más que una función con un naming recomendado,es muy sencillo crearlo(lo llamaremos useLabels):
+
+En useLabels.tsx
+const getLabels = async (): Promise<Label[]> => {
+  console.log((await githubApi.get<Label[]>("/labels")).data);
+  return (await githubApi.get<Label[]>("/labels")).data;
+};
+
+export const useLabels = () => {
+  const labelsQuery = useQuery(["labels"], getLabels, {
+    refetchOnWindowFocus: false,
+  });
+  return { labelsQuery };
+};
+
+Fijate de nuevo que si quitamos el foco en la app y lo recuperamos por un instante se hace la petición.Si hacemos demorar 2 seg la petición lo vemos más claro.Pasando del estado 'fetching' a 'stale'.	
+
+			VIDEO 08 ESTADOS DE LA DATA -FRESH-FETCHING-PAUSED-STALE 
+
+Realmente sabemos que los labels van a cambiar muy poco,no se van a crear cada segundo,por ejemplo.
+Fresh significa que la data la acabo de obtener
+Fetching es que se esta pidiendo la data
+Paused: puedo pausar peticiones mediante esta libreria(ya lo veremos).Paused pausaría el fetching unicamente
+Stale: stale significa que la data ya está vieja(en caché).Realmente es como estará casi siempre,ya que solo pasa por un instante por el estado de fresh y pasa a stale inmediatamente después.Stale va intimamente ligado a la caché
+
+IMPORTANTE: mediante la propiedad staleTime puedo especificar el tiempo que quiero que permanezca 'stale' la data.
+
+export const useLabels = () => {
+  const labelsQuery = useQuery(["labels"], getLabels, {
+    refetchOnWindowFocus: false,
+    staleTime: 1000 * 60 * 60, // 1 hora  
+  });
+  return { labelsQuery };
+};
+
+Por último el estado inactivo se dará cuando un componente no tiene acceso a esa caché llamada 'labels',esta inactiva la data en ese componente(investigar más).
+Por defecto react-query borra al de 5 minutos todas las querys/cachés en estado inactivo para ser más eficiente
+
+NOTA:recuerda que con estos gestores de peticiones el isLoading es la mejor opcion para los spinners,pues no se va a disparar si hay algo en la cache,diferenciandose en esto con el isFetching,que le da igual si hay data o no(mejor experiencia)
+
+					VIDEO 09 ICON LOADER
+
+Video para cambiar este flamante h1:
+ if (labelsQuery.isLoading) return <h1>Loading</h1>;
+
+Fijate que tuvimos que meter este css:
+
+.loader {
+  animation: spin-animation 1.5s infinite linear;
+  display: block;
+}
+
+@keyframes spin-animation {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+				VIDEO 10 INITIAL DATA Y PLACEHOLDER DATA
+
+En muchas ocasiones yo ya tendré una idea de como va a lucir la data antes de reaizar la petición.Por ejemplo,al entrar a un <entity>/:id,al detalle de una lista  yo ya sé como luce la data,pues he cargado la lista de los items.
+Aqui hay varias estrategias que puedo tomar para mejorar la experiencia de usuario de mi app y que sientan que la aplicación vuela.
+En esta libreria existen dos propiedades interesantes llamadas initialData y placeholderData que debo usar para esto.
+
+ const labelsQuery = useQuery(["labels"], getLabels, {
+    refetchOnWindowFocus: false,
+    staleTime: 1000 * 60 * 60, // 1 hora
+    // el placeholderData tiene que ser un objeto que luzca de tipo Label
+    // me servirá para pre-mostrar cierta información mientras se da el fetching
+    placeholderData: [
+      {
+        id: 791921801,
+        node_id: "MDU6TGFiZWw3OTE5MjE4MDE=",
+        url: "https://api.github.com/repos/facebook/react/labels/%E2%9D%A4%EF%B8%8F",
+        name: "❤️",
+        color: "ffffff",
+        default: false,
+        description: "",
+      },
+      {
+        id: 710573595,
+        node_id: "MDU6TGFiZWw3MTA1NzM1OTU=",
+        url: "https://api.github.com/repos/facebook/react/labels/Component:%20Developer%20Tools",
+        name: "Component: Developer Tools",
+        color: "fbca04",
+        default: false,
+        description: "",
+      },
+    ],
+
+
+Ahora,cuando haga la petición veré dos etiquetas(o las que declare) en vez del spinner
+
+Si uso la propiedad initialData veré lo mismo,pero si además uso staleTime dejaré esa initialData como válida,seguramente no es lo que quiera.
+
+Fijate que pre-cargar data me quita el spinner de carga,pues ya tengo algo.
+
+				VIDEO 11 SELECCIONAR ETIQUETAS
+
+Necesitamos saber qué etiquetas ha seleccionado el usuario,para despues aplicar filtros(esto ya no es de react-query sino de la app).Con un arreglo de label.name nos vale(string[]).
+
+Fijate que declaramos en el padre la funcion y el state,etc:
+
+export const ListView = () => {
+
+  const [selectedLabels, setSelectedLabels] = useState<string[]>([])
+
+  const onLabelChange = (labelName: string) => {
+    // si incluye el name lo quito,si no lo agrego 
+    selectedLabels.includes(labelName) 
+    ? setSelectedLabels([...selectedLabels.filter(l => l !== labelName)])
+    : setSelectedLabels([...selectedLabels, labelName])
+  }
+  return (
+    <div className="row mt-5">
+      
+      <div className="col-8">
+        <IssueList />
+      </div>
+      
+      <div className="col-4">
+        <LabelPicker 
+        selectedLabels={selectedLabels}
+        onChange={ (labelName) => onLabelChange(labelName)}
+        />
+      </div>
+    </div>
+
+Y en el onClick del hijo(el item) mandamos el string y pintamos un background condicional para los seleccionados:
+
+
+interface LabelPickerProps {
+  selectedLabels: string[];
+  onChange: (label: string) => void;
+}
+export const LabelPicker: React.FC<LabelPickerProps> = ({ selectedLabels, onChange }) => {
+  const { labelsQuery } = useLabels();
+
+  // el isLoading,a diferencia del isFetching es cuando estoy cargando la data por primera vez,si ya tengo data en caché no se dispara,por eso queremos el isLoading para el spinner
+  if (labelsQuery.isLoading) return <LoadingIcon />;
+
+  return (
+    <>
+      {labelsQuery.data?.map((label) => (
+        <span
+          key={label.id}
+          className={`badge rounded-pill m-1 label-picker ${
+            selectedLabels.includes(label.name) ? "label-active" : ""
+          }`}
+          style={{ border: `1px solid #${label.color}`, color: `${label.color}` }}
+          onClick={() => onChange(label.name)}
+        >
+          {label.name}
+        </span>
+      ))}
+    </>
+
+					SECCION 04 ISSUES
+
+Esta sección está dedicada a la carga de los issues y sus comentarios, la idea es aprender cómo manejar el caché, segmentarlo y ordenarlo para mejor lectura y comprensión.
+
+Lo que será de mucha utilidad cuando queramos realizar cargas por adelantado de nuestras peticiones HTTP.
+
+Crearemos un customHook useIssues para esto.
+
+Dado que vamos a realizar peticiones más frecuentemente vamos a generar un token en GitHub que nos dé un lapso más grande para consumir información.
+
+			VIDEO 04 SECCION 04 AUTENTICACION EN GITHUB
+
+Genero un token yendo a settings/developer settings y personal access tokens.GEnero un nuevo token,le doy un nombre y duración y acceso solo a repos públicos y permisos de lectura solo.Lo mando en el useLabels como Bearer Auth
+
+			VIDEO 06 CARGAR ISSUES DE GITHUB
+
+Queremos realizar una petición a https.//api.github.com/repos/facebook/react/issues esta vez para rescatar las issues.De momento vamos a crear un customHook.
+No hay mucha ciencia,es prácticamente igual que el useLabels:
+
+const getIssues = async (): Promise<Issue[]> => {
+  const { data } = await githubApi.get<Issue[]>("/issues");
+  console.log(data);
+  return data;
+};
+export const useIssues = () => {
+  const issuesQuery = useQuery(["issues"], getIssues);
+  return { issuesQuery };
+};
+
+Lo llamamos en el ListView.
+
+					VIDEO 09 MOSTRAR ISSUES EN PANTALLA
+
+Simplemente seguir la resolución de la tarea en el video.
+NOTA: vamos a precargar cierta data.Fijate que esto parece ser una buena práctica.
+
+			VIDEO 10 NAVEGAR Y  CARGAR ISSUE POR NUMERO
+
+Ahora queremos ir a issue/:id y navegar a esa issue.Es casi la misma info que obteniendo el listado de todas.Usaremos esto para precargar data más adelante.
+
+ Fijate que cuando este en la url /issues/issue/:id veo las dos cachés 'labels' e 'issues' como inactivas,lo cual tiene mucho sentido.Si pasaran 5 minutos react-query borrará esas cachés.Fijate también que si vuelvo atrás me sirve de la caché,no habiendo tiempo de carga para el usuario
+
+Bien,en este punto vamos a crear otro customHook:
+
+// definimos el fetcher
+const getIssueInfo = async(issueNumber: number):Promise<Issue> => {
+ return (await githubApi.get(`/issues/${issueNumber}`).data
+}
+
+export const useIssue = (issueNumber: number) => {
+  const issueQuery = useQuery(
+    ['issue',issueNumber], <- creamos una cache con nombre dinamico
+    () => getIssueInfo(issueNumber),
+  {options}
+  return  { issueQuery}
+}
+
+LLamamos tras el enrutamiento en el componente mediante el useParams sacamos el id y lo mandamos como arg a este custom Hook.
+
+NOTA: fijate que es muy importante gestionar gráficamente los estados de la data en la app(lo suyo sería abstraerlo,claro):
+  if (issueQuery.isLoading) return <LoadingIcon />;
+  if (!issueQuery.data) return <Navigate to="/issues/list" />;
+
+Fijate de nuevo que cuando entre a un issue que ya he visitado lo va a pillar de la caché,ahorrandome el sleep hardcodeado.Amazing
+NOTA: VESA es la nomenclatura para las medidas de un tv con soporte de pared(es ancho por alto,por ejemplo 200x200 son 20cm de ancho x 20 de alto entre los 4 tornillos 
+
+				VIDEO 10 CARGAR COMENTARIOS DE UNA ISSUE
+
+Dado que tmb queremos cargar los comentarios de una issue vamos a retocar el customHook anterior:
+
+import { useQuery } from "@tanstack/react-query";
+import { githubApi } from "../../api/githubApi";
+import { sleep } from "../../helpers/sleep";
+import { Issue } from "../interfaces/issue";
+
+const getIssueInfo = async (issueNumber: number): Promise<Issue> => {
+  sleep(2);
+  return (await githubApi.get(`/issues/${issueNumber}`)).data;
+};
+
+const getIssueComments = async (issueNumber: number): Promise<Issue[]> => {
+  sleep(2);
+  return (await githubApi.get(`/issues/${issueNumber}/comments`)).data;
+};
+
+export const useIssue = (issueNumber: number) => {
+  const issueQuery = useQuery(["issue", issueNumber], () => getIssueInfo(issueNumber), {
+    refetchOnWindowFocus: false,
+  });
+
+  const commentsQuery = useQuery(
+    ["issue", issueNumber, "comments"],
+    () => getIssueComments(issueNumber),
+    {
+      refetchOnWindowFocus: false,
+    },
+  );
+  return {
+    issueQuery,
+    commentsQuery,
+  };
+};
+
+IMPORTANTE: fijate que pudiera ser que una petición dependa de otra,y no querramos que se ejecute si no se ha cumplido exitosamente la primera.Para esto react-query proporciona la propiedad enabled en las options del hook useQuery:
+
+const commentsQuery = useQuery(
+  ['issue',issueNumber,'comments',
+  () => getIssueComments(issueNumber),
+{ enabled:false} <- nunca se va a llamar al fetcher,es decir,desactiva todo
+
+NOTA: obviamente,enabled está en true por defecto,pero ya tenemos como habilitar condicionalmente las peticiones a los comentarios:
+
+const commentsQuery = useQuery(
+  ['issue',issueNumber,'comments',
+  () => getIssueComments(issueNumber),
+  {
+    enabled: !!issueQuery.data <- nos puede valer el boolean de issueQuery.data
+
+Ahora,si no vendría data en la primera no tira la segunda.Realmente genial esta libreria. 
+En la siguiente sección vamos a enfocarnos en optimizar las peticiones para que el cliente aún tenga una mejor experiencia de usuario.
+
+
+			SECCION 05 OPTIMIZACIONES
+
+Realmente cuando estoy trabajando sobre una aplicación ya sé como va a lucir la data,que es lo que va a devolver determinado endpoint,etc.Por este motivo,react-query permite hacer pre-fetch de las responses para mejorar aún más la UX.
+
+En esta sección haremos que al pasar por un list-item(onMouseEnter) se haga la petición incluso antes de navegar a entity:id con el onClick(ver video).
+Esto tomará aún más valor con una API especialmente lenta,ya que restamos tiempo a la duración total de la petición
+
+Veremos varias formas de "anticiparnos" a la petición que va a hacer el usuario y pre-cargar la data para cachearla y que no haya tiempos de carga.También veremos como setear data en las caché,algo que aún no hemos hecho
+
+Aquí veremos puntualmente:
+
+1- Pre-fetch de queries
+2- Establecer data en el caché 
+3- Establecer data en caché específico
+4- Cargar data bajo demanda
+5- QueryClient
+
+	VIDEO 04 QUERYCLIENT OBJECT- USING PREFETCH QUERY
+
+Realmente es bastante claro que vamos a realizar la petición en el onMouseEnter:
+
+En el IssueItem.tsx:
+
+  const onMouseEnter = () => {
+    console.log('on mouse entered')
+  }
+  return (
+    <div className="card mb-2 issue"
+    onClick={() => navigate(`/issues/issue/${issue.number}`)}
+    onMouseEnter={()=> onMouseEnter()}
+    >
+
+IMPORTANTE: para implementar esta feature necesitamos del queryClient.Therefore, people of react-query implemented the hook useQueryClient,which returns the same object but from any component
+
+Bien,en este objecto queryClient tengo un montón de métodos,para limpiar queries,invalidarlas,saber si estoy haciendo una mutación(POST),un fetching,...Realmente tiene muchisima funcionalidad.En este caso recordemos que queremos hacer un prefetch de las queries anteriores para una issue y los comentarios de una issue.
+
+NOTA: fijate que técnicamente debería devolver lo mismo que quiero plagiar(el get issue/:id).No tiene sentido devolver algo distinto,ni añadir ni quitar nada,devo devolver lo mismo 
+
+Realmente no habia ciencia alguna en todo esto:
+  // el hook que devuelve el queryClient no ocupa argumentos(ya va a coger el contexto adecuado)
+  const queryClient = useQueryClient();
+  
+
+  const onMouseEnter = () => {
+    // prefetchInfiniteQuery es para paginación,lo veremos
+    // fijate que tengo acceso a la issue en este Cmp
+    queryClient.prefetchQuery(
+      ['issue',issue.number],
+      () => getIssueInfo(issue.number),
+    )
+    queryClient.prefetchQuery(
+      ['issue',issue.number,"comments"],
+      () => getIssueComments(issue.number),
+    )
+  }
+   
+
+			VIDEO 06 QUERYCLIENT - SETQUERYDATA
+
+Vamos a ver otra forma de realizar peticiones adelantandose al usuario.Esta vez no vamos a realizar peticiones,sino establecer data en la caché(prefetch lo de antes,preset lo de ahora).Es básicamente lo mismo pero en vez de llamar a una función fetcher mando datos estáticos.
+
+* Fijate que el método cambia y no es queryClient.prefetchQuery sino queryClient.setQueryData.De nuevo,al tener acceso a cada issue que ya me vino en el getIssues realmente sería mala idea pedirlas de nuevo ya me las dió la petición anterior.
+Esta vez al hacer onMouseEnter iré metiendo cada issue a la caché.Increible.
+
+  const presetData = () => {
+    queryClient.setQueryData(["issue", issue.number], issue);
+  };
+
+  return (
+    <div
+      className="card mb-2 issue"
+      onClick={() => navigate(`/issues/issue/${issue.number}`)}
+      // onMouseEnter={prefetchData}
+      onMouseEnter={presetData}
+    >
+
+Fijate tmb que practicamente estamos ignorando esos dos segundos hardcodeados que hemos puesto en cada petición gracias a esta libreria
+
+			VIDEO 07 CACHE - UPDATED AT
+
+

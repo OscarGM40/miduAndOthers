@@ -1,0 +1,509 @@
+				INTRO TO TESTING WITH REACT TESTING LIBRARY
+
+Source: https://www.youtube.com/watch?v=41ox41v62jU&list=PLYSZyzpwBEWTBdbfStjqJSGaulqcHoNkT&index=1
+
+				VIDEO UNO CONCEPTOS GENERALES
+
+Hay tres tipos de testing, el EndToEnd que se hace con librerias como Selenium o Cypress,el de Integración,que es el que testea dos o más unitarios.
+Y el unitario,que en React sería un componente(o en Angular una clase)
+Un mock es remover una parte de mi código por algo que es más confiable y seguro.
+
+Si bien se recomienda al estudiar que se debe testear muchos test unitarios,menos de integración y aun menos de e2e,en la realidad lo mejor es testear mayormente los de integración(pasando de una  piramide a un rombo).
+Ya que los de integración prueban mejor la app,al ser de integración.Los unitarios están muy acoplados a las implementaciónes,ojo.
+
+			VIDEO DOS SETUP DE NEXTJS CON REACT-TESTING-LIBRARY
+
+Crearemos una app de Next y le instalaremos el testing manualmente.Fijate que también instalaremos eslint y husky.
+
+PASO UNO: crear la app(ojo con la flag --ts):
+>npx create-next-app <name> --ts
+
+PASO DOS: instalar jest ts-jest y typescript(da igual que ya tenga TS):
+>npm i -D jest ts-jest @types/jest
+
+PASO TRES: configurar ts-jest(creando el jest.config.ts):
+npx ts-jest config:init   <- yarn ts-jest config:init
+* Esto crea un archivo jest(jest.config.js) de configuración
+** Opcional:Crear el script en el package.json("test":"jest")
+
+NOTA: puedo meter la carpeta pages dentro de src para gestionar mejor una app de Next.En cuanto a si usar test o it,jest va a pasar test a it,asi que es indiferente 
+
+PASO CUATRO: una vez tenga jest y ts-jest trabajando puedo y devo instalar react-testing-library y las lib extras que quiera usar(user-event dom js-dom).
+NOTA: En la documentación solo dicen de instalar el modulo core(npm i -D @testing-library/react) pero instalaremos tmb el modulo @testing-library/user-event para testear eventos o simular entradas del teclado de una manera más sencilla.
+
+Lamentablemente este modulo @testing-library/user-event depende de @testing-library/dom y @testing-library/jest-dom(fijate que todas empiezan con @testing-library).Asi pues instalo la lib core y las tres adicionales
+yarn add -D @testing-library/react @testing-library/user-event @testing-library/dom @testing-library/jest-dom
+
+* Ojo,esto no es todo,ya que Next tiene esta opción("jsx": "preserve",)Esto no deja leer el JSX.En este punto hay que crear un file llamado tsconfig.test.json(tmb nos valdrá un tsconfig.jest.json) para pisar esa regla solamente en testing.
+El nombre(jest | test) no es importante,lo importante es que es un archivo para configurar TS en testing:
+
+En el tsconfig.test.json extiendo el tsconfig.json y sobreescribo esa opcion de preserve a react-jsx(ojo,en react 16 era sólo react,pero desde la 17 es react-jsx,y esto permite que no necesite importar react en cada testing file más,por eso veré apps con react 16 con el import de react,por esta opción.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "jsx":"react-jsx"
+  }
+}
+* Y este nuevo file necesita especificarse,debo especificarlo en el jest.config.js(que cree anteriormente con yarn ts-jest config:init).Debo especificar  que tengo un file nuevo que quiero cargar en modo testing:
+* En el jest.config.js:
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  globals:{   <- AÑADIR DESDE AQUI
+    'ts-jest':{
+      tsconfig:'tsconfig.test.json'
+    }
+  }
+};
+
+* Ojo,esto aún dará fallo,ya que el testEnvironment ya no es node,sino jsdom:
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'jsdom',
+  globals:{
+    'ts-jest':{
+      tsconfig:'tsconfig.test.json'
+    }
+  }
+};
+
+IMPORTANTE: desde JEST 28 jsdom no es enviado por default,al cambiar node por jsdom veré el error,hay que instalarlo aparte:
+npm i -D jest-environment-jsdom
+
+PASO CINCO:Aun tenemos un fallo de no tener visión sobre JS-DOM en testing.Jest tiene una caracteristica llamada setupTestsAfterEnv,aqui puedo pasarle cualquier cosa que quiera que se ejecute antes de cada test.En este caso queremos pasarle un file(para cargar @testing-library/jest-dom:
+* En el jest.config.js:
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'jsdom',
+  globals:{
+    'ts-jest':{
+      tsconfig:'tsconfig.test.json'
+    }
+  },
+  setupFilesAfterEnv:['./jest.setup.js'] <- sin embargo vamos a usar ./src/jest.setup.ts pues lo queremos en TS y dentro de la carpeta src.
+
+En el src/jest.setup.ts:
+import '@testing-library/jest-dom'; <- ahora todo file va a importar esta libreria.Fijate que sencillo es levantar este ambiente de testing tan profesional.
+
+Resumen:
+1- Instalar jest,ts-jest y TS.
+2- Iniciar el file de config de jest(npx ts-jest config:init)
+3- Instalar @testing-library/react | dom | user-event | js-dom
+4- Crear un tsconfig.test.json para pisar el "jsx":"preserve" de desarrollo
+5- Decirselo a jest en el jest.config.json
+6- Cambiar el environment en el jest.config.json(ojo con jest 28+)
+7- Crear el jest-setup.ts y especificarlo en el jest.config.json
+
+			PARTE DOS CONFIGURAR ESLINT
+
+También queremos tener un linter.Lo primero será iniciarlo:
+>npx eslint --init
+En este punto prefiero usar mi forma de usar el linter
+
+			PARTE TRES USAR LINT-STAGED + HUSKY
+
+El siguiente comando instalará y configurará husky y lint-staged dependiendo de la herramienta de gestión de calidad de código que especifique en el package.json.Estas herramientas son Prettier o ESLint:
+>npx mrm@2 lint-staged <- es muy parecido a un config:init
+
+NOTA: esto cada vez que se haga un commit pasará prettier y el linter.Asi que hay que instalar:
+npm install -D lint-staged prettier
+
+NOTA: husky necesita un repo,el comando npx mrm@2 lint-staged necesita un repo de Git
+IMPORTANTE: esto va a hacer que antes de cada commit se ejecute el comando 'npm run lint-staged',el cual puedo definir lo que hará:
+  "lint-staged": {
+    "*": "prettier --write --ignore-unknown"
+  }
+}
+Yo lo dejo asi,pero el Youtuber tmb le pasó el eslint --cache --fix
+Y en este momento también crea una GithubAction(de tipo Node).Simplemente le va a pasar los comandos npm run lint y npm run test
+Por último va a establecer un code coverage en el jest.config.js:
+
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'jsdom',
+  globals:{
+    'ts-jest':{
+      tsconfig:'tsconfig.test.json'
+    }
+  },
+  setupFilesAfterEnv:['./jest.setup.ts'],
+  coverageThreshold:{
+    global:{
+      branches:100,
+      functions:100,
+      lines:100,
+      statements:100
+    }
+  }
+};
+Y también necesitará de más flags en el script del package.json:
+"test:ci":"jest --coverage --silent --ci"
+En este momento tengo un gran tutorial(puedo probar a añadirle el eslint y la github action).Poco a poco.
+TIPS: al final no era npx run lint-staged(por el SO)
+Fijate como lo vi:
+time lint-staged <- no lo encuentra
+time npx lint-staged <- lo encuentra
+
+					VIDEO 03 STARTING THE TESTS
+
+Crearemos nuestros primeros test,veremos como agarrar elementos de la screen y disparar eventos y despues realizaremos tests sobre un componente ya existente más complejo.
+La tercera parte será mediante TDD añadir nuevas features a ese componente.
+
+IMPORTANTE: realizar un getBy hace un throw Error si no tiene exito.Puedo cambiarlo por un queryBy para recibir un null y que no caiga el test:
+
+describe('Tests on Counter', () => {
+  beforeEach(() => {
+    render(<Counter defaultCount={0} description={'My Counter'} />);
+  });
+
+  it('defaultCount=0,then counter = 1', () => {
+    expect(screen.getByText('Current Count: 0')).toBeInTheDocument();
+    screen.getByText(/My Counter/i);
+  });
+
+Fijate que por legibilidad se usa
+expect(screen.getByText('Current Count: 0')).toBeInTheDocument();
+pero por el motivo anterior ya me iba a valer solo con 
+screen.getByText(/My Counter/i);
+
+Y los find por defecto hacen await.Es decir get es sincrono y lanza error,query es sincrono y no lanza error y find es asincrono y lanza error.
+TIP:los beforeEach tienen como scope su describe
+
+IMPORTANTE: puedo usar el atributo aria-label como grabber:
+      <button aria-label="Decrement" onClick={() => setCount(count - 1)}>
+        -
+      </button>
+      Current Count: {count}
+      <button aria-label="Increment" onClick={() => setCount(count + 1)}>
+        +
+      </button>
+
+IMPORTANTE: para escribir sobre un input,si bien podría usar el método fireEvent hay una solución más sencilla usando la libreria que ya instalé user-event:
+
+import user from '@testing-library/user-event' <- fijate que es un export default
+
+Si ahora veo todo lo que ofrece el objeto,veré que tiene user.type() para escribir y que incluso tiene un user.click con lo que podria haberlo usado en los tests anteriores.
+
+  describe('when the incrementor changes to 5 and "+" is clicked', () => {
+    beforeEach(() => {
+      user.type(screen.getByLabelText(/Incrementor:/i), '{selectall}5');
+      fireEvent.change(screen.getByTestId('my-input'), {
+        target: { value: 4 },
+      });
+      user.click(screen.getByRole('button', { name: /Add to Counter/i }));
+    });
+    it('renders "Current Count: 4" when adding 4', () => {
+      expect(screen.getByText('Current Count: 4')).toBeInTheDocument();
+    });
+  });
+Al final tuve que usar fireEvent.change.
+
+						VIDEO 04 ASYNCHRONOUS TESTING
+
+TIP: el método findBy permite esperar por cambios en el DOM.Realiza un barrido cada 50ms y el default timeout es de 1000ms,aunque puede configurarse tanto el intervalo para el barrido como el timeout total.
+const button = screen.getByRole('button',{name:'Click me'})
+fireEvent.click(button);
+await screen.findByText('Clicked once')
+
+NOTA: esto solo es syntactic sugar para el await waitFor.
+
+Bien,veamos un ejemplo.Si por ejemplo tenemos una acción asíncrona asi:
+  onClick={() => setTimeout(() => setCount(count + 1), 200)}
+
+Si dejo el screen.getByText fallará.Tengo dos soluciones,una usar await findBy y la otra,que es lo mismo,es usar await waitFor().Logicamente con la segunda puedo usar getBy o queryBy
+  
+  it('defaultCount=0,and + clicked then counter = 1', async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Add to Counter' }));
+    expect(await screen.findByText('Current Count: 1')).toBeInTheDocument();
+   - o bien -
+    await waitFor( () => expect(screen.getByTestId('xxx').toBeInTheDocument()));
+  });
+
+IMPORTANTE: nada me impide uasr async/await en un beforeEach.Por ejemplo,para asegurarme que tengo cierta data antes:
+beforeEach( async () => {
+  user.type(screen.getByLabelText(/Incrementor/),'{selectall}5')
+  user.click(screen.getByRole('button',{name:'Click me'}))
+  await waitFor( () => screen.getByText('Current Count: 15')
+})
+** Esto además puede que me permita quitar asincronia de los tests,ya que la centralicé en el beforeEach.
+
+			WAIT FOR ELEMENTS TO BE REMOVED FROM THE DOM
+
+Fijate que puedo nombrar la función de cleanup de un useEffect.Para comprobar que un elemento se elimina del DOM basta con usar await waitForElementToBeRemoved
+
+  useEffect(() => {
+    let id: NodeJS.Timeout;
+    if (count >= 15) {
+      id = setTimeout(() => setBigEnough(true), 300);
+    }
+    return function cleanup() {
+      clearTimeout(id);
+    };
+  }, [count, incrementor]);
+
+
+
+  it('renders too big and then it will disappear after xxxMS', async () => {
+    await waitForElementToBeRemoved(() =>
+      screen.getByText('I am too small to be a real div')
+    );
+  });
+
+			VIDEO 05 MOCKING REACT COMPONENTS AND FUNCTIONS
+
+Imaginando que tengo una función que usa Math.random puedo mockear esta función para que devuelva lo que quiera con jest.spyOn(Object,method).Fijate que jest.spyOn recibe un Object como primer argumento:
+
+import { randomBetween } from './randomBetween';
+
+jest.spyOn(Math, 'random');
+
+describe('randomBetween', () => {
+  describe('when Math.random() returns 0', () => {
+    beforeEach(() => {
+      // find a way to mock math.random to return 0
+    });
+    it('called with min = 3 and max = 5 returns 3', () => {
+      expect(randomBetween(3, 5)).toBeGreaterThanOrEqual(5);
+    });
+  });
+});
+
+Con la sintaxis mock.mockClear().mockReturnValue()
+
+IMPORTANTE: recuerda que debo limpiar las llamadas a los mocks,pues son acumulativas.Puedo hacerlo por cada mock:
+
+const randomSpy = jest.spyOn(Math, 'random');
+
+describe('randomBetween', () => {
+  describe('when Math.random() returns 0', () => {
+    beforeEach(() => {
+      // find a way to mock math.random to return 0
+      randomSpy.mockClear().mockReturnValue(0);
+    });
+    it('called with min = 3 and max = 5 returns 3', () => {
+      expect(randomBetween(3, 5)).toBeGreaterThanOrEqual(3);
+      expect(Math.random).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('when Math.random() returns 0.5', () => {
+    beforeEach(() => {
+      // find a way to mock math.random to return 0
+      randomSpy.mockClear().mockReturnValue(0.5);
+    });
+    it('called with min = 3 and max = 5 returns 4', () => {
+      expect(randomBetween(3, 5)).toBeGreaterThanOrEqual(4);
+      expect(Math.random).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('when Math.random() returns 0.999', () => {
+    beforeEach(() => {
+      // find a way to mock math.random to return 0
+      randomSpy.mockClear().mockReturnValue(0.9999);
+    });
+    it('called with min = 3 and max = 5 returns 5', () => {
+      expect(randomBetween(3, 5)).toBeGreaterThanOrEqual(5);
+      expect(Math.random).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
+TIP: puedo hacer que cualquier test no termine inmediatamente,sino que termine cuando YO llame a done() pasandole ese arg en el it:
+
+it('xxxxx',(done) => {}) <- este test no terminará hasta que yo llame a done()
+
+Ejemplo:
+
+describe('Testing data-grid of material', () => {
+  it('renders the grid with columns and rows', (done) => {
+    const myOnMoney = (n: number) => {
+      console.log('clicked');
+      expect(n).toBe(33);
+      done();
+    };
+    render(<Example2 onMoney={myOnMoney} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Give me 33 dollars' }));
+  });
+});
+
+Sin embargo,esto es poco legible y confuso,y normalmente se usa jest.fn().mockImplementation
+
+Ahora si,veamos como mockear cualquier componente(que fijate que es una función):
+Si por ejemplo tengo esto:
+import { DataGrid } from '@material-ui/data-grid';
+
+*Puedo mockear esa libreria:
+jest.mock('@material-ui/data-grid', () => ({
+  DataGrid:jest.fn(() => <div>Table</div>)
+}));
+* Fijate que puedo retornar el HTML que quiera,y que jest.mock es realmente potente
+
+Si por alguna razón quiero algo más de esa libreria,pero sin mockearlo puedo usar jest.requireActual:
+jest.mock('@material-ui/data-grid', () => ({
+   ...jest.requireActual('@material-ui/data-grid'),
+   DataGrid: jest.fn(() => <div>Table</div>)
+})
+Fijate que podria no mockear nada y traerme todo el original
+
+
+* En resumen,para poder usar esa DataGrid con mi HTML me traigo el import,le hago un jest.mock con lo que quiera y despues uso jest.mocked:
+
+import { DataGrid } from '@material-ui/data-grid';
+
+jest.mock('@material-ui/data-grid', () => {
+  jest.requireActual('@material-ui/data-grid');
+  return {
+    DataGrid: jest.fn(() => <div>Table</div>),
+  };
+});
+
+const mockedDataGrid = jest.mocked(DataGrid, true);
+
+// const mockedDataGrid = mocked(DataGrid); <- esto antes venia de ts-jest/utils,pero desde jest 28 la pasaron a jest.mocked
+
+IMPORTANTE: de nuevo,fijate como jest.mocked tmb guarda un historico de cuantas veces fue llamado entre test.Es igual que jest.fn() tengo que limpiar las llamadas:
+
+const mockedDataGrid = jest.mocked(DataGrid, true);
+
+describe('Testing data-grid of material', () => {
+  beforeEach(() => {
+    mockedDataGrid.mockClear();
+    // jest.clearAllMocks();
+  });
+  it('renders the grid with columns and rows', () => {
+    const myOnMoney = jest.fn();
+    render(<Example2 onMoney={myOnMoney} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Give me 33 dollars' }));
+    expect(myOnMoney).toHaveBeenCalledWith(33);
+  });
+
+  it('renders table passing the expected properties', () => {
+    render(<Example2 onMoney={jest.fn()} />);
+    expect(mockedDataGrid).toHaveBeenCalledTimes(1);
+  });
+
+Fijate que para el segundo render mockedDataGrid ya fue llamado antes en el primer Example,luego no daría 1 sino 2.
+
+Fijate que mejorar en testing me permite hacer cosas como esta:
+  it('renders table passing the expected properties', () => {
+    render(<Example2 onMoney={jest.fn()} />);
+    expect(mockedDataGrid).toHaveBeenCalledTimes(1);
+    expect(mockedDataGrid).toHaveBeenCalledWith(
+      {
+        rows: expect.arrayContaining([
+          expect.objectContaining({ id: expect.any(Number) }),
+        ]),
+        columns: expect.arrayContaining([
+          expect.objectContaining({ field: expect.any(String) }),
+        ]),
+        pageSize: 5,
+        checkboxSelection: true,
+      },
+      {}
+    );
+  });
+Donde estoy testeando que las rows son un array de objetos que tendran un campo id numérico y las columnas lo mismo pero el campo se llama field y es un string.
+
+Fijate que toHaveBeenCalledWith(expected,initialContext) lleva un objeto vacio como segundo argumento,parece que es el estado inicial,y da fallo si no se lo paso.Luego es muy importante el initialContext en el toHaveBeenCalledWith.
+
+						EXAMPLE03 M 17
+
+Para el ejemplo 3 de nuevo puedo mockear toda la libreria de @material-ui/core:
+
+import { render, screen } from '@testing-library/react';
+import { MyDrawer } from './Drawer';
+import user from '@testing-library/user-event';
+
+jest.mock('@material-ui/core', () => ({
+  // le paso la factory
+  ...jest.requireActual('@material-ui/core'),
+  SwipeableDrawer: jest.fn(() => <div>Hellooo</div>),
+}));
+
+describe('Drawer', () => {
+  it('shows not the original text but the mocked', () => {
+    render(<MyDrawer />);
+    expect(screen.queryByText('Hellooo')).toBeInTheDocument();
+  });
+
+  it('clicking on "Open Drawer" shows the mocked text too', () => {
+    render(<MyDrawer />);
+    user.click(screen.getByRole('button', { name: 'Open Drawer' }));
+    expect(screen.queryByText('Hellooo')).toBeInTheDocument();
+  });
+});
+
+			EXAMPLE 04 MOCKEAR ALGO QUE ES DE MI PROPIA APLICACIÓN
+
+Esto es muy interesante,ya que quiero mockear un componente de mi app,realmente.
+
+import { MyDrawer } from '../example03/Drawer';
+
+export function Example4() {
+  return <MyDrawer />;
+}
+
+En el test simplemente en vez de apuntar a una libreria apunto a un componente.Fijate que tengo otras formas de pasarle mi propia implementación,antes fue con la factory,ahora esperaremos a jest.mocked().mockImplementation( () => ... )
+
+import { render, screen } from '@testing-library/react';
+import { MyDrawer } from '../example03/Drawer';
+import { Example4 } from './Example04';
+
+jest.mock('../example03/Drawer');
+jest.mocked(MyDrawer).mockImplementation(() => <div>mocked Drawer</div>);
+
+describe('Example04', () => {
+  it('renders MyDrawer', () => {
+    render(<Example4 />);
+    expect(screen.getByText('mocked Drawer')).toBeInTheDocument();
+  });
+});
+
+Fijate que podria haber usado la factory:
+jest.mock('../example03/Drawer', () => ({
+  default: jest.fn(() => <div>mocked default</div>),
+  MyDrawer: jest.fn(() => <div>mocked Drawer</div>),
+}));
+
+describe('Example04', () => {
+  it('renders MyDrawer', () => {
+    render(<Example4 />);
+    expect(screen.getByText('mocked Drawer')).toBeInTheDocument();
+  });
+});
+
+pero si solo es uno es mas facil usar jest.mocked.Simplemente iré mejorando,asinto,no worries
+
+						EXAMPLE 05 COMPLEX COMPONENTS
+
+Imaginando que tenemos un componente muy complejo,con varios niveles(complex/verycomplex/myComponent.tsx) que usa varias carpetas y componentes hay una forma de mockearlo.
+TEngo que crear la carpeta __mocks__ y dentro de ella un file con el mismo nombre(pero sin el test)
+
+Es decir que tengo un componente que se llama MyComponent.tsx:
+export function MyComponent(){
+  return <div>Componente original</div>;
+}
+Y si lo quiero mockear,creo un folder en ese path llamado __mocks y un componente con el mismo nomber:
+En el __mocks__/MyComponent.tsx:
+export function MyComponent(){
+  return <div>Componente mock</div>
+
+Aún me falta traer el módulo original con jest.mock,pero traeré el mockeado:
+
+import { render, screen } from '@testing-library/react';
+import { Example5 } from './Example05';
+
+jest.mock('../../VeryComplex/DeepFolder/DeeperFolder/VeryComplex');
+
+describe('Example 05', () => {
+  it('renders the component in __mocks__', () => {
+    render(<Example5 />);
+    expect(screen.getByText('Simple Version')).toBeInTheDocument();
+    expect( screen.queryByText('Very Complex Component')
+    ).not.toBeInTheDocument();
+  });
+});
+
+Puedo observar que es igual que cambiarle yo la implementación a mano en el test(ya sea en la factory o despues),con lo que tengo 3 formas de mockear el componente.Sin embargo,esta puede ser útil para no repetirse.Interesante.
+Investigar más sobre el folder __mocks__ y testing.

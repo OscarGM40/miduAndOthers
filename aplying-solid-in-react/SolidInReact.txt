@@ -1,0 +1,346 @@
+				APLYING SOLID PRINCIPLES IN REACT
+
+Source: https://www.youtube.com/watch?v=jKdt-BnTTR0&t=530s&ab_channel=midulive
+
+Si bien los principios SOLID se crearon para OOP se pueden aplicar a componentes,a programación funcional más o menos de la misma forma
+Veré cada uno de los cinco principios y un ejemplo en React
+
+			SINGLE RESPONSIBILITY PRINCIPLE
+
+S(Single Responsibility Principle): cada clase debería tener una única responsabilidad.Una clase no debería de hacer más que una tarea.Con componentes podriamos decir lo mismo,un componente no deberia tener muchas responsabilidades,solo una.
+
+Partimos de este ejemplo:
+
+const TodoList = () => {
+  const [data, setData] = useState<TodoType[]>([]);
+  const [isFetching, setIsFetching] = useState(true);
+
+  useEffect(() => {
+    axios
+      .get<TodoType[]>("https://jsonplaceholder.typicode.com/todos")
+      .then((res) => setData(res.data))
+      .catch((err) => console.log(err))
+      .finally(() => setIsFetching(false));
+  }, []);
+
+  if (isFetching) {
+    return <p>Loading...</p>;
+  }
+  return (
+    <ul>
+      {data.map((todo) => {
+        return (
+          <li key={todo.id}>
+            <span>{todo.id}</span>
+            <span>{todo.title}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+Normalmente,este principio es un tanto dificil determinar el grado de responsabilidad,suele ser más la interpretación.
+Lo que podemos ver es que el componente tiene la responsabilidad de gestionar el estado,la responsabilidad de hacer el fetching de datos y finalmente tiene la responsabilidad de renderizar el contenido
+
+TIP: Normalmente si tengo un useEffect puedo crear un custom hook para suplantarlo.Asi que esa va a ser la solucion.Al crear un customHook el componente ya no tiene la responsabilidad de fetchear la data(la tiene el hook)
+
+Fijate que con solo crear el custom hook el componente queda superlimpio:
+
+
+const TodoList = () => {
+const { data, isFetching } = useFetchTodo()
+
+  if (isFetching) {
+    return <p>Loading...</p>;
+  }
+  return (
+    <ul>
+      {data.map((todo) => {
+        return (
+          <li key={todo.id}>
+            <span>{todo.id}</span>
+            <span>{todo.title}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+};
+export default TodoList;
+
+Además,ya no tiene más que la responsabilidad de pintar lo que traiga el hook.Si que cabe destacar que el hook sigue haciendo dos cosas(fetching de datos y gestionar el estado isFetching a si o no).
+Al final hay que valorar este principio,ya que el hook está bien asi,y refactorizarlo puede que sea mayor el desgaste que el beneficio.
+
+				OPEN-CLOSED PRINCIPLE
+
+OpenClosed: las entidades que tenga mi software tienen que estar abiertas para su extensión(herencia) pero cerradas para su modificación.De nuevo en clases se ve muy bien,pero es totalmente aplicables a componentes.
+
+Los children son un caso clarisimo de extensión,ya que puedo hacer que el HOC/padre renderice como contenido cualquier cosa.
+
+<Button>{children}</Button> // extensible
+<Button title={title}></Button> //no extensible,habria que modificar
+
+ Bien,si bien ese ejemplo es muy claro,hay más ocasiones.Partimos de :
+
+const OpenClosed: FC<Props> = ({ title, type, href, buttonText, onClick }) => {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between" }}>
+      <h1>{title}</h1>
+
+      {type === "withLinkButton" && (
+        <button onClick={onClick}>
+          <a href={href}>{buttonText}</a>
+        </button>
+      )}
+
+      {type === "withNormalButton" && <button onClick={onClick}>{buttonText}</button>}
+    </div>
+  );
+};
+export default OpenClosed;
+
+Esto que es un ejemplo sin sentido se ve mucho en rutas(si el path === renderizo X,si el path === renderizo Y).Es decir,si mañana hay otro type tendría que ir al componente y modificarlo añadiendo otro { type === 'withAnotherType' && <button>...)
+Es decir,estoy entrando al componente para modificarlo,luego no estoy cumpliendo el principio de que tenga que estar abierto para extensión y cerrado para su modificación
+
+Esto es realmente sencillo,simplemente hay que crear más componentes,uno que sea la base y despues le voy pasando como children(por extensión y no modificación) los types.Fijate que cuando cree uno nuevo no tengo que modificar la implementación:
+
+const Title: FC<PropsWithChildren<TitleProps>> = ({ title, children }) => {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between" }}>
+      <h1>{title}</h1>;
+      {children}
+    </div>
+  );
+};
+
+Obviamente faltaria crear el ButtonWithLInk, el NormalButton,etc que no vamos a hacer.Muy interesante,asinto
+Recuerda: las entidades de mi software deben estar abiertas para su extensión pero cerradas para su modificación.
+
+Midu presenta un ejemplo con rutas:
+const Header = ({children}) => {
+  <header>
+    <Logo />
+    <Actions>
+    {children}
+    </Actions>
+  </header>
+
+Y ahora cada ruta implementa el Header como quiere:
+const HomePage = () => {
+  <Header>
+    <Link to="/dashboard"> ...
+  </Header>
+  <OtherStuff />
+
+Y otra ruta lo extiende de otra forma:
+const DashboardPage = () => {
+  <Header>
+    <Link to="/events">...
+  </Header>
+  <OtherStuff />
+
+Se puede ver perfectamente como se usa extensión.También se ve que realmente queda abierto a todo,cuando debería ser un Link solo y le puedo pasar un h1,asi que no siempre va a ser lo mejor usar children(sobre todo en React).Una prop sería mejor
+
+			LISKOV SUBSTITUTION PRINCIPLE
+
+Un subtipo de objeto debería ser sustituible por un supertipo de ese objeto.Es decir un Dog extends Animal,tanto Dog como Animal deberían ser intercambiables.
+Más sencillo: una subclase debería poder hacer todo lo que hace la superclase,además de lo suyo propio.
+
+Esto lleva a que puedo cambiar las implementaciones
+Partamos de que tengo esto como código:
+export class Animal {
+  swim(distance: number){
+    console.log(`${distance} made swimming`);
+  }
+}
+
+export class Dog extends Animal {
+  swim(distance: number){
+    console.log(`${distance} made swimming`);
+  }
+}
+
+export class Cat extends Animal {
+  swim(){
+    throw new Error('Cats don\'t like water')
+  }  
+}
+
+En este caso se está rompiendo este principio ya que tanto el Cat como el Animal deberian ser intercambiables y llamar a new Cat().swim() daría un error.
+Esto se arregla con interfaces de comportamiento(SwimmingAnimal,WalkingAnimal...)
+export class SwimmingAnimal {
+  swim(distance: number){
+    console.log(`${distance} made swimming`);
+  }
+}
+export class WalkingAnimal {
+  walk(distance: number){
+    console.log(`${distance} made walking`);
+  }
+}
+
+export class Dog extends SwimmingAnimal {
+  swim(distance: number){
+    console.log(`${distance} made swimming`);
+  }
+}
+
+export class Cat extends WalkingAnimal {
+  walk(distance: number){
+    console.log(`${distance} made walking`);
+  }
+} 
+
+Sin embargo,esto es para POO.En React podriamos tener por ejemplo dos componentes con props diferentes:
+
+const Button = ({ children, color, size }: Props) => {
+  return <button style={{ color, fontSize: size === "xl" ? "32px" : "16px" }}>{children}</button>;
+};
+
+const RedButton = ({ children, isBig }: any) => {
+  return (
+    <button style={{ color: "red", fontSize: isBig === "xl" ? "32px" : "16px" }}>{children}</button>
+  );
+};
+
+return (
+  <div>
+    <RedButton isBig={true}>
+      Mi botón que funciona
+    </RedButton>
+  </div>
+)
+Si el dia de mañana queremos cambiar el RedButton por un Button no podré,porque no son sustituibles(violan pues el principio de sustitución de Liskov).
+
+Lo que podemos hacer es tratar a RedButton como un subtipo de un supertipo(Button).Para esto tendrá que tener las mismas props:
+
+interface Props {
+  children: React.ReactNode;
+  color?: string;
+  size: "xl" | any;
+}
+const Button = ({ children, color, size }: Props) => {
+  return <button style={{ color, fontSize: size === "xl" ? "32px" : "16px" }}>{children}</button>;
+};
+
+const RedButtonSubstituibleByLiskov = ({ children, size }: Props) => {
+  return (
+    <button style={{ color: "red", fontSize: size === "xl" ? "32px" : "16px" }}>{children}</button>
+  );
+};
+
+return (
+  <div>
+    <RedButtonSubstituibleByLiskov size="xl">
+      Mi botón que funciona
+    </RedButtonSubstituibleByLiskov>
+  </div>
+);
+
+Fijate que ahora son intercambiables y que color es opcional.Cuando quiera puedo cambiar la concrección donde el color es rojo por una abstracción donde debo decirle el color
+En resumen,lo que no es normal es que al usar un subtipo se rompa lo que ibamos a hacer con el supertipo.
+
+					INTERFACE SEGREGATION PRINCIPLE
+
+Los clientes no deberían depender de interfaces que no necesitan(puedo ver aqui interface como un contrato,es decir,que una instancia no debería tener un contrato/interfaz con props que no usará).
+Esto está ligado al principio OpenClosed,cuando un componente recibe demasiadas props que no necesita o no usará
+En React muchas veces se da cuando al hacer un map se le pasa un objeto entero a cada iteración:
+
+<ul>
+ {items.map(item =>
+   <Thumbnail key={item.id} video={item} /> <- le paso todo el item
+
+Y en el componente Thumbnail:
+const Thumbnail = ({video}) => {
+  return <img src={video.coverUrl} />
+
+Podemos ver que realmente solo necesitaba el video.coverUrl,no todo el objeto
+
+Fijate que esto podría dar problemas a futuro,si el objeto video cambiará me podría romper tests,cuando este tipo de bugs era evitable usando interface segregation(reduciendo los contratos al minimo)
+
+En React esto se ve mucho en los tipicos:
+<div>
+  <PostTitle {...post} /> <- solo necesitaba el title
+  <span> author: {post.author.name}</span>
+  <PostDate {...post} /> <- y este solo necesita el createdAt
+
+Siempre que se pueda debo tratar de cumplir con la segregación de interfaces/contratos a lo que necesite únicamente el cliente.
+
+Fijate tmb que esto no es bueno llevarlo a rajatabla,si tengo un objeto de 15 props y necesito 10,mejor pasar la copia del objeto,o de lo contrario querer aplicar este principio por fancyness desembocará en complejidad adicional innecesaria.
+
+				DEPENDENCY INVERSION PRINCIPLE
+
+Nuestros componentes,clases,funciones,... deberían depender de abstracciones y no de implementaciones.Un ejemplo muy típico es un fetch con la url en duro:
+
+import useSWR from "swr";
+
+const fetcher = async (url: string) => {
+  const res = await fetch(url);
+  return res.json();
+};
+
+const Todo = () => {
+  const { data, error } = useSWR("https://jsonplaceholder.typicode.com/todos", fetcher);
+
+  if (!data && !error) {
+    return <p>Loading...</p>;
+  }
+
+  return (
+    <ul>
+      {data.map((todo: any, idx: number) => {
+        return (
+          <li key={idx}>
+            <span>{todo.it}</span>
+            <span>{todo.title}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+};
+export default Todo;
+
+Este código tal como está ese useSWR no me proporciona nada.Seria mejor abstraerlo a un customHook y que pueda recibir la url por argumento,al menos.
+
+El hook luciria asi:
+import useSWR from "swr";
+
+interface UseFetch<T> {
+  key: string;
+  fetcher: () => Promise<T>;
+}
+
+interface Response<T> {
+  data: T | undefined;
+  error: string | undefined;
+  isValidating: boolean;
+}
+
+export const useData = <T,>({ key, fetcher }: UseFetch<T>): Response<T> => {
+  const { data, error, isValidating } = useSWR<T, string>(key, fetcher);
+  return { data, error, isValidating };
+};
+
+
+Y despues al usar el customHook no necesita saber ni el fetcher ni la url:
+
+const fetcherFromApi = async (): Promise<ResponseType[]> => {
+  const url = "https://jsonplaceholder.typicode.com/posts";
+  const res = await fetch(url);
+  return res.json();
+};
+
+const Todo = () => {
+  const { data, error } = useData<ResponseType[]>({ key: "/todos", fetcher: fetcherFromApi });
+
+Fijate que además sé el tipo de la respuesta.El fetcher incluso podria ser el localStorage,no tiene ni porque ser una petición http:
+
+const fetcher = async():Promise<ResponseType[]> => {
+  const post = localStorage.getItem('posts')
+  return posts ? JSON.parse(posts) : []
+}
+
+Y no solo esto,sino que tampoco sabemos desde la implementación si estoy atacando una API,si es un mock,si viene desde localStorage,etc...
+
+NOTA: la propiedad key la usa SWR para gestionar la cache de la respuesta,actualizar peticiones,etc,la pusimos '/todos' para que sepa identificar la respuesta con un id.

@@ -1,0 +1,231 @@
+				CURSO FRAMER MOTION BY MIDU
+
+Source: https://www.youtube.com/watch?v=4HnLIAX0EoM&ab_channel=midulive
+
+Framer es una aplicación que permite crear productos interactivos.Es competencia de Figma.Es colaborativa,igual que Figma.
+Tienen una libreria para animar/interaccionar con HTML,que se llama Framer Motion.
+Es bastante estable y madura,ellos la catalogan como production-ready por ello.
+Es totalmente gratis.
+
+Permite tener animaciones declarativas,usando una sintaxis super simple.Esto va genial con todo,sobre todo React.
+
+Fijate que le mete Ids a los elementos,asi sabe como animar conjuntos de Cards,por ejemplo.
+
+También usa Server Side Rendering,con lo que desde el inicio cada elemento ya tiene los estilos que necesita,haciendo todo muy fluido y sin fallos.
+
+			CREANDO UN PROYECTO E INSTALANDO LA LIBRERIA	
+
+Simplemente creamos un proyecto con vite e instalamos la libreria:
+>npm init vite@latest | yarn create vite | npm create vite ...
+>yarn add framer-motion
+
+Simplemente es traerse motion por destructuring y aplicarlo a la tag que quiera:
+
+import { motion } from 'framer-motion'
+
+function App() {
+
+  return (
+    <div className="">
+      <motion.h1 animate={{y:100}}>Hello World</motion.h1>
+    </div> 
+  )
+}
+Tendré que decirle como animarse también.No puede ser más sencillo.Fijate que también podemos fijar un estado inicial con el atributo initial:
+
+   <div className="">
+      <motion.h1
+        initial={{
+          color:'#ff0000',
+        }}
+        animate={{
+          y: 100,
+          color: "#fff",
+        }}
+      >
+        Hello World
+      </motion.h1>
+    </div>
+
+ NOTA:fijate que muchas veces voy a necesitar un estado inicial y una duration.Las propiedades initial,animate y transition son básicas en esta libreria
+
+      <motion.div
+        className="box"
+        initial={{ scale: 1 }}
+        animate={{ scale: 2 }}
+        transition={{ duration: 2 }}
+      ></motion.div>
+
+				KEYFRAMES 24M
+
+El elemento puede recibir un array de steps en la animacion.Fijate en este ejemplo que junta scale con rotate con el borderRadius:
+
+      <motion.div
+        className="box"
+        initial={{ scale: 1 }}
+        animate={{
+          scale:[1,2,2,1,1],
+          rotate:[0,0,270,270,0],
+          borderRadius:["20%", "20%", "50%", "50%", "20%"]
+        }}
+        transition={{ duration: 2 }}
+      ></motion.div>
+
+				VARIANTS
+
+También puedo pasar varios estilos,y dependiendo de una condicion cambiar entre ellos.Por ejemplo,en base a un useState:
+
+const variants = {
+  odd: {
+    backgroundColor: "#333",
+    color: "#fff",
+  },
+  even: {
+    backgroundColor: "#999",
+    color: "#000",
+  },
+};
+
+ <motion.div className="box" variants={variants} animate={counter % 2 === 0 ? "even" : "odd"}>
+        {counter}
+      </motion.div>
+      <button onClick={() => setCounter((c) => c + 1)}>Incrementar!</button>
+
+Fijate que necesita la propiedad variants obviamente y despues animate con un ternario.Observa como crear varios steps o estilos en base a una condicion es supersencillo.
+
+NOTA:fijate que puedo arrastar los elementos tan solo poniendo la prop drag a true      <motion.div
+      className="box"
+      variants={variants}
+      drag
+      dragMomentum={false}
+Se le puede pasar unas dragConstraints con el top,left,right,etc 
+
+También puedo cambiar estilos segun esté el elemento en una posicion u otra.Para ello necesitaré los hooks useMotionValue y useTransform:
+
+const y = useMotionValue(0);
+const backgroundColor = useTransform(y, [-50, 0, 50], ["#fff", "#999", "#000"]);
+
+Y se los tengo que pasar en el style:
+
+  <motion.div
+    className="box"
+    variants={variants}
+    style={{backgroundColor,y}} 
+    drag  
+
+Obviamente necesita drag o algo para que se mueva.Puedo observar que va muy fluida esta libreria.
+
+			SCROLL TRIGGERED ANIMATIONS
+
+Puedo animar cosas en cuanto lleguen al viewport,gracias a la prop whileInView.Si además agrego once a true sólo lo hará una vez
+
+NOTA: en React es dificil animar componentes una vez se han removido del DOM.Al wrapear la tag <motion.xxx> en un <AnimatePresence> permite animar ese elemento al removerse del DOM
+
+Descargo la app del repo del video y empezaremos animando el h1 del header:
+
+<motion.h1
+  initial={{ scale: 0 }}
+  animate={{ scale: 1 }}
+  transition={{ duration: 2, ease: "easeInOut", delay: 0.2, type: "spring" }}
+  >
+  todos
+</motion.h1>
+
+Fijate que fácil fue animar una <ul> + sus <li>.
+
+En la <ul> hay que usar <AnimatePresence>(ya que es el contenedor,y es para la salida,la propiedad exit)
+<AnimatePresence>
+<ul>
+{ items.map( i => <Item>)
+</ul>
+</AnimatePresence>
+
+Y despues en cada <li> o item le paso las propiedades initial,exit,animate,duration,variants,layoutId,...
+
+    <motion.li
+      className={classnames({ completed: todo.completed, editing })}
+      custom={{ delay: (index + 1) * 0.1 }}
+      initial='hidden'
+      animate='visible'
+      variants={variants}
+      layoutId={todo.id}
+    >
+
+Las variants son estas:
+const variants = {
+  hidden: {
+    opacity: 0
+  },
+  visible: ({ delay }) => ({
+    opacity: 1,
+    transition: {
+      delay,
+      duration: 1
+    }
+  })
+}
+Esto hace un fadeIn y fadeOut en cada li al aparecer o eliminarse
+
+IMPORANTE: si en las variants accedo al custom tengo que usar la propiedad custom:
+
+const variants = {
+  hidden:...
+  visible: (custom) => ({}) <- fijate que devuelve un objeto
+
+Esto obliga a usar:
+<motion.li 
+   custom={{ delay: (index + 1) * 0.1 }}
+   variants={variants} 
+Estas dos van juntas,además seguramente que también necesite el layoutId,luego van las tres juntas
+
+NOTA: la libreria ya tiene propiedades que resumen esto a un único paso,como delayChildren o staggerChildren,y asi no tengo que pasarle un custom + variants:
+
+const container= {
+  hidden: {opacity:0},
+  show: { opacity:1,transition: { staggerChildren: 0.5 } } <- autoincrementa sola
+
+y le paso el objeto en las variants
+<motion.ol
+  initial='hidden'
+  animate='show'
+  variants={container}
+ >
+  <motion.li variants={item} /> 
+  <motion.li variants={item} /> 
+
+Fijate en los botones como los puedo animar segun el evento,por ejemplo whileTap o whileHover:
+   <motion.button
+      whileTap={{ scale: 0.9 }}
+      whileHover={{ cursor: 'pointer', scale: 1.5 }}
+      type='button'
+      className='destroy'
+      onClick={() => deleteTodo(todo.id)}
+   />
+
+IMPORTANTE: el componente Reorder permite guardar drag and drop(reordenación).Obviamente irá en un contenedor:
+
+  <Reorder.Group className='todo-list' axis='y' values={todos} onReorder={setTodos}>
+      {getFilteredTodos(todos, visibilityFilter).map((todo, index) => (
+        <Reorder.Item key={todo.id} value={todo}>
+          <TodoItem index={index} todo={todo} />
+        </Reorder.Item>
+      ))}
+    </Reorder.Group>
+
+Fijate que necesita varias cosas,como la función onReorder y los values y el axis.
+
+NOTA:<Reoder.Group> es una <ol> y <Reorder.Item> un <li>.
+
+Esa funcion setTodos simplemente reguarda el arreglo:
+      <TodoList
+        todos={todos}
+        visibilityFilter={visibilityFilter}
+        setTodos={todos => dispatch({
+          type: 'SET_TODOS',
+          payload: {
+            todos
+          }
+        })}
+      /> 
+
+Fijate que sencillo fue implementar un drag and drop con esta libreria.Es increibble esta libreria.

@@ -1,0 +1,129 @@
+				HOW TO USE USEMEMO AND REACTMEMO
+
+Es muy importante manejar la memorización,ya que cada vez que cambia el estado en un componente React re-renderiza ese componente(y sus hijos).
+
+Como ejemplo uno tenemos una función muy costosa,y muchos cambios de estado.No tiene sentido alguno no memorizar la función:
+
+export const UseMemo = () => {
+  const [text, setText] = useState("");
+
+  const expensiveFunction = () => {
+    console.log("function rerendered")
+    let total = 0;
+    for (let i = 0; i < 10000000; i++) {
+      total += i;
+    }
+    return total;
+  };
+
+  const sum = React.useMemo( () => expensiveFunction(),[]);
+  
+  return (
+    <div>
+      <input onChange={(e) => setText(e.target.value)} placeholder="enter a text" />
+      <span>Total: {sum}</span>
+    </div>
+  );
+
+De echo si no lo hago aprecio ralentizaciones.Fijate que useMemo memoriza en la memoria del ordenador,asi que hay que tener en cuenta que tiene un costo cada memorización.
+TIP: fijate que tras usar useStateSnipet solo tengo que dar a la 'c'
+Resumen del ejemplo uno: cualquier funcion minimamente costosa debe ser memorizada.
+
+EJEMPLO DOS: tengo un objeto dentro del componente.Fijate que es un objeto,y que va a crearse de nuevo en cada renderización.Esto lo puedo ver pasando el objeto en un useEffect como dependencia:
+
+export const UseMemoWithUseEffect = () => {
+  const [name, setName] = useState("");
+  const [age, setAge] = useState(null);
+  const [country, setCountry] = useState("");
+
+  const userType = {
+    underAge: age < 18 ? true : false,
+    citizen: country === "USA" ? true : false,
+  };
+
+  useEffect( () => {
+    console.log("UserType has changed")
+  },[userType]) <- FIJATE QUE INTERESANTE,ASINTO
+
+  console.log("Component re-rendered")
+  
+  return (
+    <div>
+      <input onChange={(e) => setName(e.target.value)} placeholder="name" />
+      <input onChange={(e) => setAge(e.target.value)} placeholder="age" type="number" />
+
+      <select onChange={(e) => setCountry(e.target.value)}>
+        <option value="USA">USA</option>
+      </select>
+    </div>
+  );
+};
+Dado que todos los objetos son diferentes entre si,la solucion es englobarlo de nuevo con useMemo.Fijate que antes guardé una función,y ahora un objeto.Increible:
+
+  const userType = React.useMemo( () => ({
+      underAge: age < 18 ? true : false,
+      citizen: country === "USA" ? true : false,
+    }),
+    [age, country]);
+
+NOTA: y lo mismo para un array,va a crearse de nuevo(ya que es un objeto) en cada renderización(lo puedo ver con un simple useEffect con el array como dependencia:
+  const myArray = ["cosa","casa","cusa"];
+  
+  useEffect(() => {
+    console.count("Array has changed");
+  }, [myArray]);
+
+Obviamente la solución es memorizarlo,y si quisiera que se re-memorize le paso las dependencias que dispararán esta acción:
+ const myArray = React.useMemo( () => ["cosa","casa","cusa"],[]);
+
+Fijate que no ocurre lo mismo con strings,claro:
+  const miString = "moko"
+  
+  useEffect(() => {
+    console.count("String has changed");
+  }, [miString]);
+
+EJEMPLO CUATRO: memorizar un componente.Cuando tenga un componente que hace calculos costosos(da igual que tenga props o no,simplemente que tenga logica costosa) debe ser memorizado(a no ser que las props sean muy dinámicas,lo cual probablemente sea un error de base):
+
+function App() {
+  const [text, setText] = useState("");
+
+return (
+  <div>
+    <input onChange={(e) => setText(e.target.value)} placeholder="enter a text" />
+    <ExpensiveComponent />
+  </div>
+ );
+}
+
+export default App;
+
+Y ExpensiveComponent es muy costoso:
+
+export const ExpensiveComponent = () => {
+
+  console.log("expensive component rendered")
+
+  let total = 0;
+  for(let i = 0; i < 1000000; i++) { total += i }
+
+  return ( <div>ExpensiveComponent</div>)
+}
+
+Esto además puedo ver el console.log:
+
+export const ExpensiveComponent = React.memo(() => {
+
+  console.log("expensive component rendered")
+
+  let total = 0;
+  for(let i = 0; i < 100000000; i++) { total += i }
+
+  return ( <div>ExpensiveComponent</div>)
+})
+
+Como este componente nunca cambia es mucho mejor memorizarlo,incrementando drásticamente la performance.
+
+Cuando usar la memorización: realmente no debo memorizar todo,pues la memorización no es gratis.
+
+NOTA: age > 18 no necesita el ternario,ya va a devolver true o false
