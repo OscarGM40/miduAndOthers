@@ -5,17 +5,8 @@ import { Label } from "../interfaces/label";
 
 const getLabels = async (): Promise<Label[]> => {
   await sleep(2);
-  console.log(
-    (
-      await githubApi.get<Label[]>("/labels", {
-        headers: {
-          Authorization: null,
-        },
-      })
-    ).data,
-  );
   return (
-    await githubApi.get<Label[]>("/labels", {
+    await githubApi.get<Label[]>("/labels?per_page=100", {
       headers: {
         Authorization: null,
       },

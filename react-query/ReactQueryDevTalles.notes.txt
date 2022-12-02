@@ -656,7 +656,6 @@ const commentsQuery = useQuery(
 Ahora,si no vendría data en la primera no tira la segunda.Realmente genial esta libreria. 
 En la siguiente sección vamos a enfocarnos en optimizar las peticiones para que el cliente aún tenga una mejor experiencia de usuario.
 
-
 			SECCION 05 OPTIMIZACIONES
 
 Realmente cuando estoy trabajando sobre una aplicación ya sé como va a lucir la data,que es lo que va a devolver determinado endpoint,etc.Por este motivo,react-query permite hacer pre-fetch de las responses para mejorar aún más la UX.
@@ -664,7 +663,7 @@ Realmente cuando estoy trabajando sobre una aplicación ya sé como va a lucir l
 En esta sección haremos que al pasar por un list-item(onMouseEnter) se haga la petición incluso antes de navegar a entity:id con el onClick(ver video).
 Esto tomará aún más valor con una API especialmente lenta,ya que restamos tiempo a la duración total de la petición
 
-Veremos varias formas de "anticiparnos" a la petición que va a hacer el usuario y pre-cargar la data para cachearla y que no haya tiempos de carga.También veremos como setear data en las caché,algo que aún no hemos hecho
+Veremos varias formas de "anticiparnos" a la petición que va a hacer el usuario y pre-cargar la data para cachearla y que no haya tiempos de carga.También veremos como setear data en las cachés,algo que aún no hemos hecho
 
 Aquí veremos puntualmente:
 
@@ -692,6 +691,7 @@ En el IssueItem.tsx:
 IMPORTANTE: para implementar esta feature necesitamos del queryClient.Therefore, people of react-query implemented the hook useQueryClient,which returns the same object but from any component
 
 Bien,en este objecto queryClient tengo un montón de métodos,para limpiar queries,invalidarlas,saber si estoy haciendo una mutación(POST),un fetching,...Realmente tiene muchisima funcionalidad.En este caso recordemos que queremos hacer un prefetch de las queries anteriores para una issue y los comentarios de una issue.
+Por ello usaremos queryClient.prefetchQuery()
 
 NOTA: fijate que técnicamente debería devolver lo mismo que quiero plagiar(el get issue/:id).No tiene sentido devolver algo distinto,ni añadir ni quitar nada,devo devolver lo mismo 
 
@@ -712,7 +712,6 @@ Realmente no habia ciencia alguna en todo esto:
       () => getIssueComments(issue.number),
     )
   }
-   
 
 			VIDEO 06 QUERYCLIENT - SETQUERYDATA
 
@@ -720,6 +719,8 @@ Vamos a ver otra forma de realizar peticiones adelantandose al usuario.Esta vez 
 
 * Fijate que el método cambia y no es queryClient.prefetchQuery sino queryClient.setQueryData.De nuevo,al tener acceso a cada issue que ya me vino en el getIssues realmente sería mala idea pedirlas de nuevo ya me las dió la petición anterior.
 Esta vez al hacer onMouseEnter iré metiendo cada issue a la caché.Increible.
+
+* Recuerda que issue me viene por props desde el map y es lo que tengo que meter en la caché,claro:
 
   const presetData = () => {
     queryClient.setQueryData(["issue", issue.number], issue);
@@ -737,4 +738,175 @@ Fijate tmb que practicamente estamos ignorando esos dos segundos hardcodeados qu
 
 			VIDEO 07 CACHE - UPDATED AT
 
+IMPORTANTE: para usar variables de entorno en Vite tengo que crearlas con 'VITE_' delante del nombre que quiera,de forma similar a REACT_APP_ en una cra.
+Despues las traigo con import.meta.env.VITE_GH_TOKEN.No tengo que instalar nada.
+Memoriza tmb que yarn remove <package> lleva las flags al final(con add si puedo ponerlas delante.Quizás sería buena idea ponerlas siempre al final)
 
+En cuanto a los tipos de .env tengo:
+.env              <- loaded in all cases
+.env.local        <- loaded in all cases(ignored by git) <- comprobarlo
+.env.[mode]       <- only loaded in that mode
+.env.[mode].local <- only loaded in that mode and again ignored by git
+
+Bien,esta vez como el título dice,si por ejemplo accedemos a una issue realmente no va a cambiar en mucho tiempo su contenido,y mediante esta libreria podemos acceder al updated at y decirle al usuario cuando fue actualizada la data por última vez.
+
+* Simplemente es añadir esto
+  const presetData = () => {
+    queryClient.setQueryData(
+      ["issue", issue.number]
+      , issue,{
+        updatedAt: new Date().getTime() + 100000
+      });
+  };
+
+Imaginando que el updatedAt son 5 minutos más desde el momento actual(y no ese 100000) react-query va a marcar esa data en caché como fresh durante 5 minutos,con lo que no va a realizar la petición mientras no esté stale
+IMPORTANTE: puedo conseguir lo mismo con el staleTime en vez del updatedAt.
+
+			SECCION 06 OBJETOS COMPLEJOS COMO CACHE NAME
+
+En esta sección vamos a cargar las issues con state 'open' y 'closed'.La primera vez haremos la petición,pero meteremos en caché el resultado,con lo que sólo veremos el loading la primera vez(también buscaremos por tagName).En la siguiente sección finalmente implementaremos una paginación
+NOTA: usaremos objetos literales como nombre de cache
+
+Esta sección está enfocada en poder construir nombres de caché complejos para manejar posibles variaciones de nombres.Por ejemplo:
+
+Buscar por varios labels + estado abierto o cerrado debería ser igual sin importar el orden de los factores.
+
+Hasta el momento, hemos visto una única forma de nombrar el caché, la cual está bien, pero si tenemos varios factores que pueden variar y queremos que sea insensible a su posición, hay consideraciones diferentes, eso es lo que veremos en esta sección.
+
+			VIDEO 04 MANEJAR EL ESTADO DE OPEN,CLOSED Y ALL
+
+Lo primero que vamos a hacer es crear un state para saber el tipo de filtro aplicado.Usaremos la enum State que hemos definido:
+ const [state,setState] = useState<State>()
+
+NOTA: fijate que hemos pasado una enum como tipo al useState<T> y que el getter 'state' es de tipo State("open"|"closed") o undefined(que sería el 'all').Es justo lo que queremos
+
+Adicionalmente vamos a definir en el padre(pero emitirá el hijo) un evento sintético cualquiera para manejar el cambio de estado:
+
+     {issuesQuery.isLoading ? (
+          <LoadingIcon />
+        ) : (
+          <IssueList
+            issues={issuesQuery.data || []}
+            state={state}
+            onStateChanged={(newState) => setState(newState)}
+          />
+        )}
+
+IMPORTANTE: podremos mandar newState con tres valores(open,closed y undefined).Muy interesante.Fijate que lo vamos a gestionar sólo con el operador ?(y como el getter del useState es undefined si inicializo el useState con un valor y no lo es si si lo inicializo:
+
+const [value,setValue] = useState("") <- value no es undefined nunca
+const [value,setValue] = useState<string>() <- value es de tipo string | undefined
+
+Muy importante,asinto.Con todo esto en mente ya podemos tipar la prop state a recibir y la función(que de nuevo recibe un argumento opcional para el undefined.
+
+interface IssueListProps {
+  issues: Issue[];
+  state?: State; // recuerda que puede venir undefined(luego prop?)
+  onStateChanged: (state?: State) => void; // tiene que ser igual que la prop
+}
+
+
+IMPORTANTE!: fijate que el hijo tiene que llamar a ese onStateChanged con un valor simplemente(o el undefined).Es solo en el onClick de cada <li>.Perfectamente enlazado todo(recordar conceptos):
+
+* Y la clase 'active' habrá que moverla también.Muy sencillo realmente ya todo.
+ <ul className="nav nav-pills card-header-pills">
+    <li className="nav-item" onClick={() => onStateChanged()}>
+      <a className={`nav-link ${!state ? "active" : ""}`}>All</a>
+    </li>
+    <li className="nav-item" onClick={() => onStateChanged(State.Open)}>
+      <a className={`nav-link ${state === "open" ? "active" : ""}`}>Open</a>
+    </li>
+    <li className="nav-item" onClick={() => onStateChanged(State.Closed)}>
+      <a className={`nav-link ${state === "closed" ? "active" : ""}`}>Closed</a>
+    </li>
+ </ul>
+
+HINT: si bien puedo usar {!state && "active"} y va a funcionar igual cuando haya state me va a calzar un false como clase(o sea calza o 'active' o false).Realmente FH no quiere esto asi que hay que usar ternarios para evitar el false como clase CSS(que realmente no haria nada).
+TIP: recuerda que React aconseja no mandar los setter por props.Realmente éste es el aproximamiento adecuado(crear una función y mandar esa función al hijo).En el padre ya esa función llamará al setter,lógicamente.
+
+NOTA: recuerda que State.Closed va a computar al string "closed".Realmente me da igual comprobar que state === "closed" o state === State.Closed
+Me gusta mucho como ha abordado esto Fernando.
+
+			VIDEO 05 FILTRAR ISSUES - OPEN & CLOSED
+
+Dado que ya estamos recibiendo el literal que hay que mandar en el hook simplemente lo mandamos al hook.Adicionalmente mandamos las labels para cachearlas:
+
+const { issuesQuery } = useIssues({state,labels:selectedLabels});
+
+*Fijate que es solo carpinteria,pero hay que tener cuidado con el state ya que va a ser siempre state? y que axios me permite pasar los params como arg de configuracion creandolos con new URLSearchParams():
+
+const getIssues = async (labels: string[], state?: State): Promise<Issue[]> => {
+  await sleep(2);
+
+  const params = new URLSearchParams();
+
+  if (state) params.append("state", state);
+
+  const { data } = await githubApi.get<Issue[]>("/issues", { params });
+  return data;
+};
+
+export const useIssues = ({ state, labels }: useIssuesProps) => {
+  // cuando el orden de los factores no importe debo usar un objeto
+  // react-query va a saber cuando una propiedad del objeto cambie y cuando no
+  const issuesQuery = useQuery(["issues", { state, labels }], () => getIssues(labels, state));
+  return { issuesQuery };
+};
+
+NOTA: fijate tmb que es mejor usar un objeto para la cache con las dos propiedades.
+Puedo comprobar todo esto viendo que solo se hace una vez la petición(tardando 2 seg).El resto lo coge de la cache(aunque sigue haciendo la petición,no lo coge de ella)
+
+				VIDEO 06 FILTRAR ISSUES - LABELS
+
+Para añadir los labels simplemente hay que añadir los nombres de los labels separados por comas(queryParam para arrays)(al query Param 'labels'):
+
+  if(labels.length > 0) {
+    const labelString = labels.join(',');
+    params.append("labels", labelString);
+  }
+
+Añadimos también que solo traiga 5 por página,y que solo traiga la página 1:
+  params.append('page','1')
+  params.append('per_page','5')
+
+Y ahora que tenemos las labels las pintamos también:
+        <div>
+            {issue.labels.map((label) => (
+              <span
+                key={label.id}
+                className="badge rounded-pill m-1"
+                style={{ backgroundColor: `#${label.color}`, color: "black" }}
+              >
+                {label.name}
+              </span>
+            ))}
+          </div>
+
+				VIDEO 08 ACTUALIZAR LA FECHA DE CREACION
+
+Nos traemos el gist de Fernando y formateamos el issue.created_at:
+
+ <span className="issue-subinfo">
+    #{issue.number} opened {timeSince(issue.created_at)} ago by <span className="fw-bold">{issue.user.login}</span>
+ </span>
+
+Lo siguiente que podemos hacer es implementar la paginación.Crearemos un botón de anterior de siguiente y despues un infinite-scroll(que es lo que está de moda ahora).
+
+RESUMEN: si nos ponemos a pensar como podriamos hacer esto sin react-query automáticamente vemos que la solución sería redux o la ContextAPI.Pero fijate que sería mucha lógica(y tiempo) a implementar.
+Siempre que use peticiones Http es altamente recomendable usar react-query.Inclusive no hemos cubierto la parte de las mutaciones(POST,PATCH,PUT,DELETE).
+NOTA: el hook no será useQuery sino useMutation para mutaciones.
+
+Y,de nuevo,cuando implemente la paginación y el infinite-scroll veré de nuevo lo fácil que es con react-query
+
+					SECCION 07 PAGINACIONES
+
+Esta sección tiene por objetivo aprender:
+
+1. Paginación tradicional
+    Siguiente página
+    Página anterior
+    Número de página
+    Caché por página y condiciones
+2. Infinite Scroll
+    Cargar siguientes registros
+    Manejar caché del infinite scroll
