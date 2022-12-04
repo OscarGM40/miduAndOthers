@@ -910,3 +910,182 @@ Esta sección tiene por objetivo aprender:
 2. Infinite Scroll
     Cargar siguientes registros
     Manejar caché del infinite scroll
+
+				VIDEO 05 PAGINACION
+
+Primeramente ponemos el HTML mediante bootstrap:
+  <div className="d-flex mt-2 justify-content-between align-items-center">
+      <button className="btn btn-outline-primary">Prev</button>
+        <span>123</span>
+      <button className="btn btn-outline-primary">Prev</button>
+  </div>
+
+Bien,lo que vamos a hacer es que el hook nos devuelva la actualPage,la prevPage y la nextPage(estas dos son funciones):
+ const { issuesQuery, page, nextPage, prevPage } = useIssues({ state, labels: selectedLabels });
+
+
+Fijate que las condiciones para poder cambiar de pagina son claras(o que venga data para incrementar o que no esté en la pagina 1 para decrementar)
+
+export const useIssues = ({ state, labels }: useIssuesProps) => {
+  const [page, setPage] = useState(1);
+
+  // cuando el orden de los factores no importe debo usar un objeto
+  // react-query va a saber cuando una propiedad del objeto cambie y cuando no
+  const issuesQuery = useQuery(["issues", { state, labels, page }], () =>
+    getIssues({ labels, state, page }),
+  );
+
+  const nextPage = () => {
+    // si no hay más data trae un arreglo vacio,no queremos incrementar nada en ese caso
+    if (issuesQuery.data?.length === 0) return;
+    setPage((prev) => prev + 1);
+    // recuerda que no es necesario relanzar la peticion ya que page cambia y dispara todo de nuevo react-query
+  };
+
+  const prevPage = () => {
+    // esta vez no es un arreglo vacio la condicion sino que estemos en una pagina mayor que 1
+    if (page > 1) setPage((prev) => prev - 1);
+  };
+  return {
+    issuesQuery,
+    page,
+    nextPage,
+    prevPage,
+  };
+Memoriza también que al llevar page como argumento del useQuery(que venia de @tanstack/react-query) si cambia redispara la petición(lo mismo que si cambiara state o labels,lógicamente).
+
+			VIDEO 06 OPTIMIZACIONES Y VALIDACIONES
+
+Aun faltan un par de cosas.Realmente el usuario puede bombardearnos con peticiones ya que no estamos controlando nada.Además,la data tarda un poco y el cambio de página es inmediato.Sería buena idea esperar a tener data para mostrar el avance o retroceso de página.
+El bloqueo de los botones es realmente fácil,usando la propiedad disabled
+
+ <button
+   className="btn btn-outline-primary"
+   onClick={prevPage}
+   disabled={issuesQuery.isFetching}
+ >Prev</button>
+   <span>{page}</span>
+ <button
+   className="btn btn-outline-primary"
+   onClick={nextPage}
+   disabled={issuesQuery.isFetching}
+ >...
+
+IMPORTANTE: esta libreria realmente me da acceso a todo,perfectamente puedo usar callbacks para el onSuccess o el onError:
+const issuesQuery = useQuery(
+  ['issues',{state,labels,page}],
+  () => getIssues({labels,state,page}),
+  {
+    onSuccess(),
+    onError(), <- tengo acceso a muchas más callbacks que estas dos(ver firmas si fuera necesario)
+  });
+* En estas callbacks podria cambiar perfectamente el state,la caché,etc
+
+			VIDEO 07 PREPARACION PARA EL INFINITE SCROLL
+
+Creamos una copia del componente ListView y lo renombramos a ListViewInfinite.Le quitamos los botones de next y prev ya que haremos la carga con el scroll.Creamos una ruta para el cmp también en el routes/index.ts:
+
+ { path: "list/infinite", element: <ListViewInfinite /> },
+
+IMPORTANTE: vamos a tener que usar otro hook de la misma libreria,no usaremos useQuery si queremos un infiniteScroll.Lo llamaremos useIssuesInfinite.tsx
+
+export const useIssuesInfinite = ({ state, labels }: useIssuesProps) => {
+
+  const issuesQuery = useInfiniteQuery(
+    ["issues",'infinite',{state,labels,page:1}],
+    // 
+    (data) => getIssues(data),
+    {
+      // TODO getNextPageParam
+    } 
+
+    );
+  return {
+    issuesQuery
+  };
+
+NOTA: data es un objeto con 4 propiedades(meta,signal,pageParam y queryKey).Meta y signal son para conseguir información adicional.Lo que necesito del nuevo hook es el pageParam y el queryKey,pero vamos a mandar todo el objeto data.En el siguiente video sacaremos lo necesario del objeto.
+
+			VIDEO 08 OBTENER INFORMACION DEL QUERY KEY
+
+Realmente no es complejo lo que hizo Fernando,pero hay que leer la docu,pues el tipado es un poco raro simplemente:
+
+interface getIssuesProps {
+  state?: State;
+  labels: string[];
+  page?: number;
+}
+interface QueryProps {
+  pageParam?: number;
+  queryKey: (string | getIssuesProps)[]; <- le paso la anterior o un string
+}
+// recuerda que con este hook useInfiniteQuery la page 1 es undefined por eso hay que usar pageParam = 1
+const getIssues = async ({ pageParam = 1, queryKey }: QueryProps): Promise<Issue[]> => {
+  const [, , args] = queryKey;
+  const { labels, state } = args as getIssuesProps;
+
+  await sleep(2);
+
+  const params = new URLSearchParams();
+
+  if (state) params.append("state", state);
+
+  if (labels.length > 0) {
+    const labelString = labels.join(",");
+    params.append("labels", labelString);
+  }
+
+  params.append("page", pageParam.toString());
+  params.append("per_page", "5");
+
+  const { data } = await githubApi.get<Issue[]>("/issues", { params });
+  return data;
+};
+
+IMPORTANTE: ya no nos valdrá esto,porque ahora data es un arreglo de arreglos(cada uno con su pagina y no un arreglo de 1d,sino de 2):
+   <IssueList
+     issues={issuesQuery.data || []}
+     state={state}
+     onStateChanged={(newState) => setState(newState)}
+   />
+
+Recuerda que para aplanar tengo el .flat()(y que ademas es data.pages),asi que ahora queda asi
+<IssueList issues={issuesQuery.data?.pages.flat() || []}
+
+* Aún no funcionará el avance ya que falta la lógica para avanzar el scroll.Fijate que simplemente fue ajustar un par de cosas.
+
+				VIDEO 10 INFINITE SCROLL - SIGUIENTE PAGINA
+
+Turno de implementar la función que nos quedaba(getNextPageParam):
+
+  const issuesQuery = useInfiniteQuery(
+    ["issues", "infinite", { state, labels, page: 1 }],
+    (data) => getIssues(data),
+    {
+      getNextPageParam:(lastPage,pages) => {}
+    },
+  );
+NOTA: lo vamos a hacer con un botón,pero lo suyo hubiera sido hacerlo en el onScrollEnd.
+Fijate que pages es un Issue[][].Cada arreglo interior es una pagina,con lo que simplemente con el length sé las páginas totales([[1,2,3],[3,4,5],[6,7,8]] <- tiene 3 paginas.Perfecto
+Además el lastPage será el length tmb.
+
+NOTA: también tengo el getPrevPageParams si quisiera regresar,pero sólo necesitamos el getNextPageParam para un infiniteScroll
+
+IMPORTANTE: este método ya actualiza el pageParam y expone su lógica (al estar llamando a useInfiniteQuery).Sólo hay que llamar mediante la variable donde almacene el retorno del useInfiniteQuery(en este caso issuesQuery) al fetchNextPage:
+
+     <button
+          className="btn btn-outline-primary mt-2"
+          onClick={() => issuesQuery.fetchNextPage()}
+          disabled={!issuesQuery.hasNextPage}
+        >
+          Load more...
+        </button>
+
+De nuevo,lo suyo sería llamarlo en el scrollEnd y no en el botón
+NOTA: fijate de nuevo en la libreria que buena es,dando acceso a hasNextPage,etc.Asi puedo deshabilitar el botón tmb
+TIP: si bien podiamos haber llamado a issuesQuery.fetchNextPage por referencia lo hacemos asi por si quisieramos acceder a los args más adelante,pero funcionaría igual por referencia.
+NOTA: fijate que react-query está cacheando todo,cuando vuelva a un elemento que ya paginé cargaré toda la info que tuviera disponible.
+
+SECCION MUTACIONES <- la hará cuando el curso llegue a los 10.000 alumnos
+
+
